@@ -145,9 +145,21 @@ ipcMain.handle('system-check', async () => {
 ipcMain.handle('install-node', async (_event) => {
   const platform = process.platform
   const arch = process.arch
-  const NODE_VERSION = '22.14.0'
   const homeDir = os.homedir()
   const nodeDir = path.join(homeDir, '.openclaw', 'node')
+
+  // Get latest Node 22.x LTS version dynamically, fallback to known good version
+  let NODE_VERSION = '22.14.0'
+  try {
+    const { stdout } = await execAsync('curl -fsSL https://nodejs.org/dist/index.json', { timeout: 15000 })
+    const releases = JSON.parse(stdout)
+    const latest22 = releases.find((r: any) => r.version.startsWith('v22.') && r.lts)
+    if (latest22) {
+      NODE_VERSION = latest22.version.replace('v', '')
+    }
+  } catch {
+    // Use fallback version
+  }
 
   if (platform === 'darwin' || platform === 'linux') {
     // Download prebuilt Node.js binary (no sudo needed)
@@ -166,15 +178,35 @@ ipcMain.handle('install-node', async (_event) => {
       const nodeBin = path.join(nodeDir, 'bin')
       process.env.PATH = `${nodeBin}:${process.env.PATH}`
 
-      // Add to shell profile so openclaw and npm work after restart
-      const shellProfile = path.join(homeDir, '.zprofile')
+      // Add to shell profiles so node/npm/openclaw work in terminal after restart
       const exportLine = `export PATH="${nodeBin}:$PATH" # Added by OpenClaw Launcher`
-      try {
-        const existing = await fs.promises.readFile(shellProfile, 'utf8').catch(() => '')
-        if (!existing.includes('.openclaw/node')) {
-          await fs.promises.appendFile(shellProfile, `\n${exportLine}\n`)
-        }
-      } catch { /* ignore profile write errors */ }
+      const profiles = []
+      // Detect user's shell
+      const userShell = process.env.SHELL || ''
+      if (userShell.includes('zsh')) {
+        profiles.push(path.join(homeDir, '.zprofile'), path.join(homeDir, '.zshrc'))
+      } else if (userShell.includes('fish')) {
+        // fish uses a different syntax
+        const fishConfig = path.join(homeDir, '.config', 'fish', 'config.fish')
+        try {
+          await execAsync(`mkdir -p "${path.dirname(fishConfig)}"`)
+          const existing = await fs.promises.readFile(fishConfig, 'utf8').catch(() => '')
+          if (!existing.includes('.openclaw/node')) {
+            await fs.promises.appendFile(fishConfig, `\nset -gx PATH "${nodeBin}" $PATH # Added by OpenClaw Launcher\n`)
+          }
+        } catch { /* ignore */ }
+      } else {
+        // bash or unknown
+        profiles.push(path.join(homeDir, '.bashrc'), path.join(homeDir, '.profile'))
+      }
+      for (const profile of profiles) {
+        try {
+          const existing = await fs.promises.readFile(profile, 'utf8').catch(() => '')
+          if (!existing.includes('.openclaw/node')) {
+            await fs.promises.appendFile(profile, `\n${exportLine}\n`)
+          }
+        } catch { /* ignore profile write errors */ }
+      }
 
       // Verify
       const { stdout } = await execAsync(`"${path.join(nodeBin, 'node')}" --version`)
