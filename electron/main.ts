@@ -477,8 +477,7 @@ ipcMain.handle('install-templates', async (_event, templates: string[]) => {
       'note-taker': 'the-note-taker',
     }
 
-    // Premium templates (require license verification)
-    // Key = template slug, Value = directory name
+    // Premium templates (require license verification + remote download)
     const premiumTemplates: Record<string, string> = {
       'freelancer': 'the-freelancer',
       'content-machine': 'the-content-machine',
@@ -495,6 +494,9 @@ ipcMain.handle('install-templates', async (_event, templates: string[]) => {
       'executive-assistant': 'zozuc',
       'sales-rep': 'zklmgo',
     }
+
+    // API endpoint for secure template delivery
+    const TEMPLATES_API = 'https://lizmacliz.com/api/templates'
 
     for (const tmpl of templates) {
       try {
@@ -570,41 +572,53 @@ ipcMain.handle('install-templates', async (_event, templates: string[]) => {
             continue
           }
           
-          // License verified, install the premium template files
+          // License verified — download from secure API
           const dirName = premiumTemplates[tmpl]
-          let templateDir: string
-          if (app.isPackaged) {
-            templateDir = path.join(process.resourcesPath, 'templates', dirName)
-          } else {
-            templateDir = path.join(__dirname, '..', 'src', 'templates', dirName)
-          }
+          const productId = gumroadProductIds[tmpl]
+          let licenseKey = ''
+          try {
+            const licenses = JSON.parse(fs.readFileSync(licPath, 'utf-8'))
+            licenseKey = licenses[productId]?.key || ''
+          } catch {}
 
-          if (fs.existsSync(templateDir)) {
-            const files = fs.readdirSync(templateDir).filter(f => f.endsWith('.md'))
+          try {
+            const postBody = JSON.stringify({ productId, licenseKey, template: dirName })
+            const apiRes = await httpRequest(TEMPLATES_API, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postBody).toString(),
+              },
+            }, postBody)
+
+            if (apiRes.status !== 200) {
+              const errBody = JSON.parse(apiRes.body)
+              throw new Error(errBody.error || `HTTP ${apiRes.status}`)
+            }
+
+            const data = JSON.parse(apiRes.body)
             let installedCount = 0
-            for (const file of files) {
-              const src = path.join(templateDir, file)
-              const dest = path.join(workspaceDir, file)
+            for (const [fileName, content] of Object.entries(data.files)) {
+              const dest = path.join(workspaceDir, fileName)
               if (fs.existsSync(dest)) {
-                const srcContent = fs.readFileSync(src, 'utf-8')
-                const destContent = fs.readFileSync(dest, 'utf-8')
-                if (srcContent === destContent) continue
+                const existing = fs.readFileSync(dest, 'utf-8')
+                if (existing === content) continue
                 const backupPath = dest + '.backup.' + Date.now()
                 fs.copyFileSync(dest, backupPath)
               }
-              fs.copyFileSync(src, dest)
+              fs.writeFileSync(dest, content as string, 'utf-8')
               installedCount++
             }
             results.push({
               template: tmpl,
               status: 'success',
-              message: `Installed ${installedCount} premium template files`
+              message: `Downloaded and installed ${installedCount} premium template files`
             })
-          } else {
+          } catch (dlErr: any) {
             results.push({
               template: tmpl,
               status: 'error',
-              message: 'Premium template files not found in app bundle'
+              message: `Download failed: ${dlErr.message}`
             })
           }
         } else {
