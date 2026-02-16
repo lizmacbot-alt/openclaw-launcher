@@ -1,6 +1,6 @@
 {
   "name": "openclaw-launcher",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Beautiful desktop launcher for OpenClaw AI agents",
   "main": "dist-electron/main.js",
   "scripts": {
