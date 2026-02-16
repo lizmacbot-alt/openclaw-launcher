@@ -10,12 +10,16 @@
 }
 
 body { 
-  -webkit-app-region: drag; 
   background: #050810;
 }
 
 button, input, a, select { 
   -webkit-app-region: no-drag; 
+}
+
+/* Only the title bar area is draggable */
+.titlebar-drag {
+  -webkit-app-region: drag;
 }
 
 /* Lobster claw cursors - open default, closes on click */

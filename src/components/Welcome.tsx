@@ -145,22 +145,6 @@ export default function Welcome() {
         <span className="text-xs text-terminal-green ml-1">(But we kept the cool green text)</span>
       </p>
 
-      {/* Setup checklist with terminal styling */}
-      <div className="space-y-2 text-left text-muted mb-4 text-xs font-mono max-w-md w-full">
-        {[
-          'Install OpenClaw on your machine',
-          'Connect your AI provider (Anthropic, OpenAI...)',
-          'Set up your chat channel (Telegram, Discord...)',
-          'Equip your agent with skills & personality'
-        ].map((item, index) => (
-          <div key={item} className="flex items-center gap-2 terminal-prompt">
-            <span className="text-terminal-green">⚡</span>
-            <span className="flex-1">{item}</span>
-            <span className="text-[10px] text-cyan">STEP {index + 1}</span>
-          </div>
-        ))}
-      </div>
-
       {/* Action buttons */}
       <div className="flex flex-col items-center gap-3 mb-4">
         <button

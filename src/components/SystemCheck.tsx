@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSetupStore } from '../stores/setup-store'
 import { ipcInvoke } from '../lib/ipc'
 
@@ -183,6 +183,7 @@ export default function SystemCheck() {
   const [installing, setInstalling] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [currentCheck, setCurrentCheck] = useState('')
+  const checksEndRef = useRef<HTMLDivElement>(null)
 
   const update = (i: number, patch: Partial<Check>) =>
     setChecks((c) => c.map((ch, j) => (j === i ? { ...ch, ...patch } : ch)))
@@ -256,6 +257,11 @@ export default function SystemCheck() {
       setCurrentCheck('Error detected - but hey, that is what debugging is for...')
     }
   }
+
+  // Auto-scroll to latest check result
+  useEffect(() => {
+    checksEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [checks, error, progress])
 
   useEffect(() => { runChecks() }, [])
 
@@ -364,6 +370,9 @@ export default function SystemCheck() {
           </div>
         </div>
       )}
+
+      {/* Scroll anchor */}
+      <div ref={checksEndRef} />
 
       {/* Navigation */}
       <div className="flex gap-3">

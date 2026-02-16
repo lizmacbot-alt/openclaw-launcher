@@ -63,8 +63,8 @@ export default function App() {
     <div className="h-screen flex flex-col crt-screen terminal-grid text-white relative">
       <ParticleBackground />
       
-      {/* Title bar spacer */}
-      <div className="h-8 shrink-0 bg-gradient-to-r from-bg via-surface to-bg opacity-80" />
+      {/* Title bar spacer (draggable for window move) */}
+      <div className="h-8 shrink-0 bg-gradient-to-r from-bg via-surface to-bg opacity-80 titlebar-drag" />
       
       {/* Step indicator (fixed at top) */}
       <div className="shrink-0 relative z-10">
