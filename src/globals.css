@@ -13,15 +13,18 @@ body {
   -webkit-app-region: drag; 
   background: #050810;
   overflow: hidden;
-  cursor: url("data:image/svg+xml,%3Csvg width='24' height='24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 2l9 7-9 2v5l-9-7 9-2V2z' fill='%23ff4d4d'/%3E%3C/svg%3E") 12 12, auto;
 }
 
 button, input, a, select { 
   -webkit-app-region: no-drag; 
 }
 
-button:hover {
-  cursor: url("data:image/svg+xml,%3Csvg width='24' height='24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 2l9 7-9 2v5l-9-7 9-2V2z' fill='%23ff6666'/%3E%3C/svg%3E") 12 12, pointer;
+/* Lobster claw cursors */
+body, body * {
+  cursor: url('/cursors/claw-default.svg') 4 10, auto;
+}
+button, a, input, select, [role="button"] {
+  cursor: url('/cursors/claw-pointer.svg') 4 10, pointer;
 }
 
 /* Terminal CRT Effects */
@@ -41,10 +44,9 @@ button:hover {
   z-index: 1;
   background: linear-gradient(
     transparent 50%, 
-    rgba(0, 255, 65, 0.03) 50%
+    rgba(0, 255, 65, 0.015) 50%
   );
   background-size: 100% 4px;
-  animation: scan-lines 0.1s linear infinite;
 }
 
 .crt-screen::after {
@@ -58,10 +60,10 @@ button:hover {
   z-index: 2;
   background: radial-gradient(
     circle at center,
-    transparent 70%,
-    rgba(5, 8, 16, 0.8) 100%
+    transparent 80%,
+    rgba(5, 8, 16, 0.3) 100%
   );
-  opacity: 0.9;
+  opacity: 0.4;
 }
 
 /* Grid background */

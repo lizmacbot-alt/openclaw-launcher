@@ -1,0 +1,20 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Lobster claw cursor - closed/pointer (clicking) -->
+  <g transform="translate(2, 1)">
+    <!-- Upper pincer (closed) -->
+    <path d="M14 4 C18 2, 22 4, 23 8 C24 12, 22 13, 18 12 L16 10" 
+          fill="#ff4d4d" stroke="#991b1b" stroke-width="1.5"/>
+    <!-- Lower pincer (closed) -->
+    <path d="M14 16 C18 18, 22 16, 23 12 C24 8, 22 7, 18 8 L16 10" 
+          fill="#ff4d4d" stroke="#991b1b" stroke-width="1.5"/>
+    <!-- Arm/base -->
+    <path d="M4 10 C6 6, 10 6, 14 8 L14 12 C10 14, 6 14, 4 10Z" 
+          fill="#e53e3e" stroke="#991b1b" stroke-width="1.5"/>
+    <!-- Joint -->
+    <circle cx="14" cy="10" r="3" fill="#ff6b6b" stroke="#991b1b" stroke-width="1"/>
+    <!-- Click spark -->
+    <circle cx="23" cy="10" r="1.5" fill="#ffcc00" opacity="0.8"/>
+    <!-- Highlight -->
+    <ellipse cx="19" cy="6" rx="2" ry="1" fill="rgba(255,255,255,0.3)"/>
+  </g>
+</svg>
