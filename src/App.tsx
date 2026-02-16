@@ -60,18 +60,20 @@ export default function App() {
   const Screen = screens[screen] || Welcome
 
   return (
-    <div className="h-screen flex flex-col crt-screen terminal-grid text-white relative overflow-hidden">
+    <div className="h-screen flex flex-col crt-screen terminal-grid text-white relative">
       <ParticleBackground />
       
       {/* Title bar spacer */}
       <div className="h-8 shrink-0 bg-gradient-to-r from-bg via-surface to-bg opacity-80" />
       
-      {/* Main content */}
-      <div className="flex-1 min-h-0 relative z-10">
+      {/* Step indicator (fixed at top) */}
+      <div className="shrink-0 relative z-10">
         <StepIndicator />
-        <div className="flex-1 min-h-0">
-          <Screen />
-        </div>
+      </div>
+
+      {/* Main content (scrollable) */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative z-10">
+        <Screen />
       </div>
       
       <VersionBadge />

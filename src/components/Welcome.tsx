@@ -121,57 +121,51 @@ export default function Welcome() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full animate-in text-center px-8 relative z-10">
+    <div className="flex flex-col items-center py-6 animate-in text-center px-8 relative z-10 min-h-full justify-center">
       {/* ASCII Art Header */}
-      <div className="terminal-text text-[10px] leading-tight mb-4 opacity-60">
-        <pre>{`
-╔═══════════════════════════════════════╗
+      <div className="terminal-text text-[10px] leading-tight mb-3 opacity-60">
+        <pre>{`╔═══════════════════════════════════════╗
 ║     OPENCLAW LAUNCHER INITIALIZED     ║
 ║        >>> QUIRKY MODE ACTIVE <<<     ║
-╚═══════════════════════════════════════╝
-        `}</pre>
+╚═══════════════════════════════════════╝`}</pre>
       </div>
 
-      {/* Logo */}
-      <OpenClawLogo />
+      {/* Logo (smaller) */}
+      <div className="shrink-0 scale-75 -my-2">
+        <OpenClawLogo />
+      </div>
 
       {/* Title with glitch effect */}
-      <h1 className="text-4xl font-bold tracking-tight mb-2 font-mono">
+      <h1 className="text-3xl font-bold tracking-tight mb-1 font-mono">
         Welcome to <span className="glitch-text text-claw" data-text="OpenClaw">OpenClaw</span>
       </h1>
-      
-      {/* Tagline */}
-      <div className="text-cyan font-mono text-lg mb-6 typewriter">
-        Your AI, Your Rules
-      </div>
 
-      <p className="text-base text-muted mb-8 max-w-md font-mono">
+      <p className="text-sm text-muted mb-4 max-w-md font-mono">
         Personal AI agent setup in minutes. No terminal wizardry required.
-        <br />
-        <span className="text-xs text-terminal-green">(But we kept the cool green text)</span>
+        <span className="text-xs text-terminal-green ml-1">(But we kept the cool green text)</span>
       </p>
 
       {/* Setup checklist with terminal styling */}
-      <div className="space-y-3 text-left text-muted mb-8 text-sm font-mono max-w-md">
+      <div className="space-y-2 text-left text-muted mb-4 text-xs font-mono max-w-md w-full">
         {[
           'Install OpenClaw on your machine',
           'Connect your AI provider (Anthropic, OpenAI...)',
           'Set up your chat channel (Telegram, Discord...)',
           'Equip your agent with skills & personality'
         ].map((item, index) => (
-          <div key={item} className="flex items-center gap-3 terminal-prompt">
-            <span className="text-terminal-green animate-pulse">⚡</span>
+          <div key={item} className="flex items-center gap-2 terminal-prompt">
+            <span className="text-terminal-green">⚡</span>
             <span className="flex-1">{item}</span>
-            <span className="text-xs text-cyan">STEP {index + 1}</span>
+            <span className="text-[10px] text-cyan">STEP {index + 1}</span>
           </div>
         ))}
       </div>
 
       {/* Action buttons */}
-      <div className="flex flex-col items-center gap-4 mb-6">
+      <div className="flex flex-col items-center gap-3 mb-4">
         <button
           onClick={() => setScreen('system-check')}
-          className="pixel-button px-8 py-4 rounded-lg text-white font-bold text-lg interactive-glow"
+          className="pixel-button px-8 py-3 rounded-lg text-white font-bold text-base interactive-glow"
         >
           <span className="flex items-center gap-3">
             🚀 INITIALIZE AGENT
@@ -181,7 +175,7 @@ export default function Welcome() {
         
         <button
           onClick={handleConnectExisting}
-          className="terminal-card px-6 py-2 rounded-lg text-sm hover:text-claw transition-colors font-mono border"
+          className="terminal-card px-5 py-2 rounded-lg text-xs hover:text-claw transition-colors font-mono border"
         >
           {checking ? (
             <QuirkyLoadingMessages />
@@ -189,7 +183,7 @@ export default function Welcome() {
             <span className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-terminal-green animate-pulse" />
               Agent detected - Reconnect
-              <span className="text-xs text-cyan">[{existingConfig.provider}]</span>
+              <span className="text-[10px] text-cyan">[{existingConfig.provider}]</span>
             </span>
           ) : (
             <span className="flex items-center gap-2">
@@ -201,28 +195,9 @@ export default function Welcome() {
       </div>
 
       {/* Fun footer */}
-      <div className="text-xs text-muted font-mono opacity-70">
-        <span className="text-claw">Warning:</span> This installer has personality. 
-        <br />
+      <div className="text-[10px] text-muted font-mono opacity-70">
+        <span className="text-claw">Warning:</span> This installer has personality.
         Side effects may include: joy, confusion, and mild lobster obsession.
-      </div>
-
-      {/* Animated ASCII decoration */}
-      <div className="absolute bottom-4 left-4 text-claw/30 text-xs font-mono opacity-50">
-        <pre>{`    /\\   /\\
-   (  . .)
-    )   (
-   (  v  )
-  ^^     ^^`}</pre>
-      </div>
-
-      <div className="absolute bottom-4 right-4 text-cyan/30 text-xs font-mono opacity-50">
-        <pre>{`    ┌─┐
-    │ │
-    └─┘
-     │
-    /│\\
-   / │ \\`}</pre>
       </div>
     </div>
   )

@@ -254,7 +254,7 @@ export default function TemplateMarketplace() {
   const skillsCount = selectedTemplates.length
 
   return (
-    <div className="flex flex-col h-full animate-in px-8 py-4 overflow-y-auto">
+    <div className="flex flex-col min-h-full animate-in px-8 py-4">
       {/* Header */}
       <div className="text-center mb-6">
         <div className="text-xs text-muted font-mono mb-2 tracking-wider">

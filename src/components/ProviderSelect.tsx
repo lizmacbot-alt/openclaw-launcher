@@ -46,7 +46,7 @@ export default function ProviderSelect() {
   }
 
   return (
-    <div className="flex flex-col items-center h-full animate-in px-8 py-4 overflow-y-auto">
+    <div className="flex flex-col items-center min-h-full animate-in px-8 py-4">
       <h2 className="text-2xl font-bold mb-1">Connect your AI brain</h2>
       <p className="text-muted mb-6 text-sm">Pick your AI provider</p>
 

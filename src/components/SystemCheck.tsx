@@ -286,7 +286,7 @@ export default function SystemCheck() {
   const canProceed = allGood || hasWarningOnly
 
   return (
-    <div className="flex flex-col items-center justify-center h-full animate-in px-8">
+    <div className="flex flex-col items-center justify-center min-h-full animate-in px-8 py-6">
       {/* ASCII Header */}
       <div className="terminal-text text-[10px] leading-tight mb-4 opacity-60">
         <pre>{`

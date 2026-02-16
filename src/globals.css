@@ -12,7 +12,6 @@
 body { 
   -webkit-app-region: drag; 
   background: #050810;
-  overflow: hidden;
 }
 
 button, input, a, select { 

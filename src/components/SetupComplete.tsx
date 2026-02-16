@@ -214,7 +214,7 @@ export default function SetupComplete() {
 
   if (phase === 'error') {
     return (
-      <div className="flex flex-col items-center justify-center h-full animate-in px-8 text-center">
+      <div className="flex flex-col items-center justify-center min-h-full animate-in px-8 py-6 text-center">
         <div className="text-6xl mb-6 error-shake">💥</div>
         
         <h2 className="text-3xl font-bold mb-4 text-error font-mono">
@@ -248,7 +248,7 @@ export default function SetupComplete() {
 
   if (phase === 'done') {
     return (
-      <div className="flex flex-col items-center justify-center h-full animate-in px-8 text-center relative overflow-hidden">
+      <div className="flex flex-col items-center justify-center min-h-full animate-in px-8 py-6 text-center relative">
         {/* Confetti */}
         {showConfetti && (
           <div className="absolute inset-0 pointer-events-none">
@@ -336,7 +336,7 @@ export default function SetupComplete() {
 
   // Setup in progress
   return (
-    <div className="flex flex-col items-center justify-center h-full animate-in px-8 text-center">
+    <div className="flex flex-col items-center justify-center min-h-full animate-in px-8 py-6 text-center">
       <div className="text-4xl mb-6 claw-spinner">⚡</div>
       
       <h2 className="text-2xl font-bold mb-4 font-mono">
