@@ -7,6 +7,7 @@ import ChannelSetup from './components/ChannelSetup'
 import TemplateMarketplace from './components/TemplateMarketplace'
 import SetupComplete from './components/SetupComplete'
 import AgentManager from './components/AgentManager'
+import { useEffect, useState } from 'react'
 
 const screens: Record<string, React.FC> = {
   welcome: Welcome,
@@ -18,17 +19,62 @@ const screens: Record<string, React.FC> = {
   manager: AgentManager,
 }
 
+function ParticleBackground() {
+  const [particles, setParticles] = useState<Array<{ id: number; x: number; delay: number }>>([])
+  
+  useEffect(() => {
+    const newParticles = Array.from({ length: 15 }, (_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      delay: Math.random() * 8
+    }))
+    setParticles(newParticles)
+  }, [])
+
+  return (
+    <div className="particles">
+      {particles.map((particle) => (
+        <div
+          key={particle.id}
+          className="particle"
+          style={{
+            left: `${particle.x}%`,
+            animationDelay: `${particle.delay}s`
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function VersionBadge() {
+  return (
+    <div className="version-badge">
+      OpenClaw Launcher v1.0.0-beta
+    </div>
+  )
+}
+
 export default function App() {
   const screen = useSetupStore((s) => s.screen)
   const Screen = screens[screen] || Welcome
 
   return (
-    <div className="h-screen flex flex-col bg-bg text-white">
-      <div className="h-8 shrink-0" />
-      <StepIndicator />
-      <div className="flex-1 min-h-0">
-        <Screen />
+    <div className="h-screen flex flex-col crt-screen terminal-grid text-white relative overflow-hidden">
+      <ParticleBackground />
+      
+      {/* Title bar spacer */}
+      <div className="h-8 shrink-0 bg-gradient-to-r from-bg via-surface to-bg opacity-80" />
+      
+      {/* Main content */}
+      <div className="flex-1 min-h-0 relative z-10">
+        <StepIndicator />
+        <div className="flex-1 min-h-0">
+          <Screen />
+        </div>
       </div>
+      
+      <VersionBadge />
     </div>
   )
 }
