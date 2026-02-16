@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["electron"],
+  "compilerOptions": {
+    "outDir": "dist-electron",
+    "noEmit": false,
+    "lib": ["ESNext"]
+  }
+}
