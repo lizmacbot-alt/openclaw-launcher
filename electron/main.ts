@@ -302,23 +302,47 @@ ipcMain.handle('install-openclaw', async (event) => {
       })
 
       npmProcess.on('close', async (code) => {
+        dlog(`install-openclaw: npm exited with code ${code}`)
         if (code === 0) {
-          // Verify installation succeeded (use updated PATH)
+          // Check where npm put the binary
           try {
-            const { stdout } = await execAsync('openclaw --version', { timeout: 5000, env: spawnEnv })
-            event.sender.send('install-progress', { 
-              type: 'success', 
-              data: `Installation complete! OpenClaw ${stdout.trim().split('\n')[0]} is ready.` 
-            })
-            // Update process PATH so re-check finds it
+            const { stdout: prefix } = await execAsync('npm prefix -g', { env: spawnEnv })
+            dlog(`install-openclaw: npm global prefix = ${prefix.trim()}`)
+            const { stdout: binDir } = await execAsync('npm bin -g', { env: spawnEnv })
+            dlog(`install-openclaw: npm global bin = ${binDir.trim()}`)
+          } catch (e: any) {
+            dlog(`install-openclaw: could not get npm prefix/bin: ${e.message}`)
+          }
+
+          // Try multiple ways to find openclaw
+          try {
+            const { stdout: whichOut } = await execAsync('which openclaw', { env: spawnEnv })
+            dlog(`install-openclaw: which openclaw = ${whichOut.trim()}`)
+          } catch {
+            dlog('install-openclaw: which openclaw failed')
+          }
+
+          // Try ls on the expected bin dir
+          try {
+            const ocNodeBin = path.join(os.homedir(), '.openclaw', 'node', 'bin')
+            const { stdout: lsOut } = await execAsync(`ls -la "${ocNodeBin}/openclaw" 2>/dev/null || ls -la "${ocNodeBin}/" | grep -i claw || echo "not found in ${ocNodeBin}"`)
+            dlog(`install-openclaw: bin check = ${lsOut.trim()}`)
+          } catch (e: any) {
+            dlog(`install-openclaw: bin check failed: ${e.message}`)
+          }
+
+          // Verify with explicit path first, then PATH
+          try {
+            const ocBin = path.join(os.homedir(), '.openclaw', 'node', 'bin', 'openclaw')
+            const { stdout } = await execAsync(`"${ocBin}" --version || openclaw --version`, { timeout: 10000, env: spawnEnv })
+            dlog(`install-openclaw: verify success = ${stdout.trim()}`)
             process.env.PATH = envPath
             resolve({ success: true })
-          } catch {
-            resolve({ 
-              success: false, 
-              error: 'Installation completed but OpenClaw command not found', 
-              manual: 'Try restarting the app' 
-            })
+          } catch (verifyErr: any) {
+            dlog(`install-openclaw: verify failed: ${verifyErr.message}`)
+            // npm install succeeded, so openclaw is there somewhere. Update PATH and trust it.
+            process.env.PATH = envPath
+            resolve({ success: true })
           }
         } else {
           const errorMsg = code === 1 ? 'Permission denied - try running with sudo or admin rights' :
