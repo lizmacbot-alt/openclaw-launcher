@@ -1,3 +1,4 @@
+declare const __APP_VERSION__: string
 import { useSetupStore } from './stores/setup-store'
 import StepIndicator from './components/StepIndicator'
 import Welcome from './components/Welcome'
@@ -50,7 +51,7 @@ function ParticleBackground() {
 function VersionBadge() {
   return (
     <div className="version-badge">
-      OpenClaw Launcher v1.0.0-beta
+      OpenClaw Launcher v{__APP_VERSION__}
     </div>
   )
 }

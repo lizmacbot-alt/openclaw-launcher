@@ -109,19 +109,23 @@ ipcMain.handle('system-check', async () => {
     try { const { stdout } = await execAsync('cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d= -f2 | tr -d \\"'); result.os.version = stdout.trim() || os.release() } catch { result.os.version = os.release() }
   }
 
-  // Node.js
+  // Node.js - check system PATH and ~/.openclaw/node/bin/
+  const openclawNodeBin = path.join(os.homedir(), '.openclaw', 'node', 'bin')
+  const envWithNode = { ...process.env, PATH: `${openclawNodeBin}:${process.env.PATH}` }
   try {
-    const { stdout } = await execAsync('node --version')
+    const { stdout } = await execAsync('node --version', { env: envWithNode })
     const ver = stdout.trim()
     result.node.installed = true
     result.node.version = ver
     const major = parseInt(ver.replace('v', '').split('.')[0], 10)
     result.node.sufficient = major >= 22
+    // Update process PATH so subsequent checks (openclaw, npm) can find node
+    process.env.PATH = `${openclawNodeBin}:${process.env.PATH}`
   } catch { /* not installed */ }
 
   // OpenClaw
   try {
-    const { stdout: whichOut } = await execAsync('which openclaw')
+    const { stdout: whichOut } = await execAsync('which openclaw', { env: envWithNode })
     if (whichOut.trim()) {
       result.openclaw.installed = true
       try {
@@ -141,32 +145,43 @@ ipcMain.handle('system-check', async () => {
 ipcMain.handle('install-node', async (_event) => {
   const platform = process.platform
   const arch = process.arch
+  const NODE_VERSION = '22.14.0'
+  const homeDir = os.homedir()
+  const nodeDir = path.join(homeDir, '.openclaw', 'node')
 
-  if (platform === 'darwin') {
-    // Download and install the official Node.js .pkg installer (no shell reload needed)
+  if (platform === 'darwin' || platform === 'linux') {
+    // Download prebuilt Node.js binary (no sudo needed)
     try {
-      const pkgArch = arch === 'arm64' ? 'arm64' : 'x64'
-      const url = `https://nodejs.org/dist/v22.14.0/node-v22.14.0.pkg`
-      const tmpPkg = '/tmp/node-installer.pkg'
-      await execAsync(`curl -fsSL "${url}" -o "${tmpPkg}"`, { timeout: 120000 })
-      await execAsync(`sudo installer -pkg "${tmpPkg}" -target /`, { timeout: 60000 })
-      await execAsync(`rm -f "${tmpPkg}"`)
-      return { success: true }
-    } catch (e: any) {
-      // Fallback: try nvm
+      const osName = platform === 'darwin' ? 'darwin' : 'linux'
+      const cpuArch = arch === 'arm64' ? 'arm64' : 'x64'
+      const tarName = `node-v${NODE_VERSION}-${osName}-${cpuArch}`
+      const url = `https://nodejs.org/dist/v${NODE_VERSION}/${tarName}.tar.xz`
+
+      await execAsync(`mkdir -p "${nodeDir}"`)
+      await execAsync(`curl -fsSL "${url}" -o "/tmp/${tarName}.tar.xz"`, { timeout: 180000 })
+      await execAsync(`tar -xf "/tmp/${tarName}.tar.xz" -C "${nodeDir}" --strip-components=1`, { timeout: 60000 })
+      await execAsync(`rm -f "/tmp/${tarName}.tar.xz"`)
+
+      // Add to PATH for current process and future shell sessions
+      const nodeBin = path.join(nodeDir, 'bin')
+      process.env.PATH = `${nodeBin}:${process.env.PATH}`
+
+      // Add to shell profile so openclaw and npm work after restart
+      const shellProfile = path.join(homeDir, '.zprofile')
+      const exportLine = `export PATH="${nodeBin}:$PATH" # Added by OpenClaw Launcher`
       try {
-        await execAsync('curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash', { timeout: 60000 })
-        await execAsync('export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm install 22', { timeout: 120000, shell: '/bin/bash' })
+        const existing = await fs.promises.readFile(shellProfile, 'utf8').catch(() => '')
+        if (!existing.includes('.openclaw/node')) {
+          await fs.promises.appendFile(shellProfile, `\n${exportLine}\n`)
+        }
+      } catch { /* ignore profile write errors */ }
+
+      // Verify
+      const { stdout } = await execAsync(`"${path.join(nodeBin, 'node')}" --version`)
+      if (stdout.trim().startsWith('v')) {
         return { success: true }
-      } catch (e2: any) {
-        return { success: false, error: e2.message, manual: 'Download from https://nodejs.org/en/download, install Node.js v22 or later' }
       }
-    }
-  } else if (platform === 'linux') {
-    try {
-      await execAsync('curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash', { timeout: 60000 })
-      await execAsync('export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm install 22', { timeout: 120000, shell: '/bin/bash' })
-      return { success: true }
+      return { success: false, manual: 'Download from https://nodejs.org/en/download, install Node.js v22 or later' }
     } catch (e: any) {
       return { success: false, error: e.message, manual: 'Download from https://nodejs.org/en/download, install Node.js v22 or later' }
     }
@@ -174,9 +189,9 @@ ipcMain.handle('install-node', async (_event) => {
     // Windows: download and run the .msi installer
     try {
       const msiArch = arch === 'arm64' ? 'arm64' : 'x64'
-      const url = `https://nodejs.org/dist/v22.14.0/node-v22.14.0-${msiArch}.msi`
+      const url = `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-${msiArch}.msi`
       const tmpMsi = `${process.env.TEMP || 'C:\\\\Temp'}\\\\node-installer.msi`
-      await execAsync(`powershell -Command "Invoke-WebRequest -Uri '${url}' -OutFile '${tmpMsi}'"`, { timeout: 120000 })
+      await execAsync(`powershell -Command "Invoke-WebRequest -Uri '${url}' -OutFile '${tmpMsi}'"`, { timeout: 180000 })
       await execAsync(`msiexec /i "${tmpMsi}" /passive /norestart`, { timeout: 120000 })
       return { success: true }
     } catch (e: any) {
