@@ -1,6 +1,6 @@
 {
   "name": "openclaw-launcher",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Beautiful desktop launcher for OpenClaw AI agents",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -53,7 +53,14 @@
     "mac": {
       "target": "dmg",
       "icon": "build/icon.icns",
-      "category": "public.app-category.utilities"
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": {
+        "teamId": "N45547YJ4V"
+      }
     },
     "win": {
       "target": "nsis",
