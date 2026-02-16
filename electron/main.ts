@@ -403,7 +403,6 @@ ipcMain.handle('install-openclaw', async (event) => {
 ipcMain.handle('auth-login', async (_event, providerId: string, authChoice: string) => {
   const openclawNodeBin = path.join(os.homedir(), '.openclaw', 'node', 'bin')
   const envPath = `${openclawNodeBin}:${process.env.PATH}`
-  const loginEnv = { ...process.env, PATH: envPath }
 
   dlog(`auth-login: provider=${providerId} authChoice=${authChoice}`)
 
@@ -423,7 +422,7 @@ ipcMain.handle('auth-login', async (_event, providerId: string, authChoice: stri
   }
   if (!openclawBin) {
     try {
-      const { stdout } = await execAsync('which openclaw', { env: loginEnv })
+      const { stdout } = await execAsync('which openclaw', { env: { ...process.env, PATH: envPath } })
       openclawBin = stdout.trim()
     } catch { /* not found */ }
   }
@@ -435,41 +434,104 @@ ipcMain.handle('auth-login', async (_event, providerId: string, authChoice: stri
 
   dlog(`auth-login: using binary ${openclawBin}`)
 
-  try {
-    // Use openclaw models auth login which opens browser for OAuth
-    const cmd = `"${openclawBin}" models auth login --provider ${providerId} --method ${authChoice} --set-default`
-    dlog(`auth-login: running: ${cmd}`)
+  // Auth login requires a TTY, so we open Terminal.app (macOS) or equivalent
+  // with the login command and wait for the user to complete it
+  const platform = process.platform
 
-    const { stdout, stderr } = await execAsync(cmd, {
-      timeout: 120000,
-      env: loginEnv,
-    })
+  if (platform === 'darwin') {
+    // Write a temporary script that runs the auth and signals completion
+    const markerFile = path.join(os.tmpdir(), `openclaw-auth-${Date.now()}.done`)
+    const scriptContent = [
+      '#!/bin/bash',
+      `export PATH="${openclawNodeBin}:$PATH"`,
+      'echo ""',
+      'echo "🦞 OpenClaw Login"',
+      'echo "Follow the prompts below to sign in."',
+      'echo ""',
+      `"${openclawBin}" models auth login --provider ${providerId} --set-default`,
+      `echo "done" > "${markerFile}"`,
+      'echo ""',
+      'echo "✅ Done! You can close this window."',
+      'sleep 3',
+    ].join('\n')
 
-    dlog(`auth-login: stdout: ${stdout.trim()}`)
-    if (stderr.trim()) dlog(`auth-login: stderr: ${stderr.trim()}`)
+    const scriptPath = path.join(os.tmpdir(), `openclaw-auth-${Date.now()}.sh`)
+    await fs.promises.writeFile(scriptPath, scriptContent, { mode: 0o755 })
+    dlog(`auth-login: wrote script to ${scriptPath}`)
 
-    return { success: true }
-  } catch (e: any) {
-    dlog(`auth-login: error: ${e.message}`)
-
-    // If the login command fails, try the onboard approach
+    // Open Terminal.app with the script
     try {
-      const onboardCmd = `"${openclawBin}" onboard --non-interactive --auth-choice ${authChoice} --skip-channels --skip-daemon --skip-health --skip-skills --skip-ui`
-      dlog(`auth-login: trying onboard fallback: ${onboardCmd}`)
-
-      const { stdout, stderr } = await execAsync(onboardCmd, {
-        timeout: 120000,
-        env: loginEnv,
-      })
-
-      dlog(`auth-login: onboard stdout: ${stdout.trim()}`)
-      if (stderr.trim()) dlog(`auth-login: onboard stderr: ${stderr.trim()}`)
-
-      return { success: true }
-    } catch (e2: any) {
-      dlog(`auth-login: onboard fallback also failed: ${e2.message}`)
-      return { success: false, error: `Login failed. Try using an API key instead. (${e2.message.slice(0, 100)})` }
+      await execAsync(`open -a Terminal.app "${scriptPath}"`)
+      dlog('auth-login: opened Terminal.app')
+    } catch (e: any) {
+      dlog(`auth-login: failed to open Terminal: ${e.message}`)
+      return { success: false, error: 'Could not open Terminal. Run manually: openclaw models auth login --provider ' + providerId }
     }
+
+    // Poll for the marker file (user completed auth)
+    const startTime = Date.now()
+    const timeout = 180000 // 3 minutes
+    while (Date.now() - startTime < timeout) {
+      try {
+        await fs.promises.access(markerFile)
+        await fs.promises.unlink(markerFile)
+        await fs.promises.unlink(scriptPath).catch(() => {})
+        dlog('auth-login: marker file found, auth completed')
+        return { success: true }
+      } catch {
+        // Not done yet, wait
+        await new Promise(r => setTimeout(r, 1000))
+      }
+    }
+
+    await fs.promises.unlink(scriptPath).catch(() => {})
+    dlog('auth-login: timed out waiting for auth')
+    return { success: false, error: 'Login timed out. Try again or use an API key.' }
+  } else if (platform === 'linux') {
+    // Try xterm, gnome-terminal, or konsole
+    const markerFile = path.join(os.tmpdir(), `openclaw-auth-${Date.now()}.done`)
+    const cmd = `PATH="${openclawNodeBin}:$PATH" "${openclawBin}" models auth login --provider ${providerId} --set-default && echo done > "${markerFile}"`
+
+    try {
+      await execAsync(`x-terminal-emulator -e bash -c '${cmd}; sleep 3'`).catch(() =>
+        execAsync(`xterm -e bash -c '${cmd}; sleep 3'`)
+      )
+    } catch {
+      return { success: false, error: 'Could not open terminal. Run manually: openclaw models auth login --provider ' + providerId }
+    }
+
+    // Quick poll
+    for (let i = 0; i < 180; i++) {
+      try {
+        await fs.promises.access(markerFile)
+        await fs.promises.unlink(markerFile)
+        return { success: true }
+      } catch {
+        await new Promise(r => setTimeout(r, 1000))
+      }
+    }
+    return { success: false, error: 'Login timed out.' }
+  } else {
+    // Windows
+    const markerFile = path.join(process.env.TEMP || os.tmpdir(), `openclaw-auth-${Date.now()}.done`)
+    const cmd = `set PATH=${openclawNodeBin};%PATH% && "${openclawBin}" models auth login --provider ${providerId} --set-default && echo done > "${markerFile}"`
+
+    try {
+      await execAsync(`start cmd /c "${cmd} && timeout 3"`)
+    } catch {
+      return { success: false, error: 'Could not open terminal.' }
+    }
+
+    for (let i = 0; i < 180; i++) {
+      try {
+        await fs.promises.access(markerFile)
+        await fs.promises.unlink(markerFile)
+        return { success: true }
+      } catch {
+        await new Promise(r => setTimeout(r, 1000))
+      }
+    }
+    return { success: false, error: 'Login timed out.' }
   }
 })
 

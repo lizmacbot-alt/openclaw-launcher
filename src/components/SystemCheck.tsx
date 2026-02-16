@@ -217,21 +217,6 @@ export default function SystemCheck() {
 
       <div ref={checksEndRef} />
 
-      {/* Copy debug logs button */}
-      <button
-        onClick={async () => {
-          try {
-            const logs = await ipcInvoke('get-debug-logs')
-            await navigator.clipboard.writeText(logs || 'No logs available')
-            setLogsCopied(true)
-            setTimeout(() => setLogsCopied(false), 2000)
-          } catch { /* ignore */ }
-        }}
-        className="text-[10px] text-muted/40 hover:text-muted font-mono mb-4 transition-colors"
-      >
-        {logsCopied ? 'Copied!' : 'Copy debug logs'}
-      </button>
-
       <div className="flex gap-3">
         <button
           onClick={() => setScreen('welcome')}

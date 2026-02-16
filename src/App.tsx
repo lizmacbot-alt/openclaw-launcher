@@ -1,5 +1,6 @@
 declare const __APP_VERSION__: string
 import { useSetupStore } from './stores/setup-store'
+import { ipcInvoke } from './lib/ipc'
 import StepIndicator from './components/StepIndicator'
 import Welcome from './components/Welcome'
 import SystemCheck from './components/SystemCheck'
@@ -49,9 +50,27 @@ function ParticleBackground() {
 }
 
 function VersionBadge() {
+  const [copied, setCopied] = useState(false)
+
+  const copyLogs = async () => {
+    try {
+      const logs = await ipcInvoke('get-debug-logs')
+      await navigator.clipboard.writeText(logs || 'No logs')
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* ignore */ }
+  }
+
   return (
-    <div className="version-badge">
-      OpenClaw Launcher v{__APP_VERSION__}
+    <div className="version-badge flex items-center gap-3">
+      <span>OpenClaw Launcher v{__APP_VERSION__}</span>
+      <button
+        onClick={copyLogs}
+        className="text-[10px] opacity-30 hover:opacity-100 transition-opacity"
+        title="Copy debug logs"
+      >
+        {copied ? '✅ copied' : '📋 logs'}
+      </button>
     </div>
   )
 }
