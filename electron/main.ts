@@ -86,9 +86,23 @@ function httpRequest(
   })
 }
 
+// ── Debug logging ──
+const debugLogs: string[] = []
+function dlog(msg: string) {
+  const ts = new Date().toISOString().slice(11, 23)
+  const line = `[${ts}] ${msg}`
+  debugLogs.push(line)
+  console.log(line)
+}
+
+ipcMain.handle('get-debug-logs', async () => {
+  return debugLogs.join('\n')
+})
+
 // ── IPC: system-check ──
 
 ipcMain.handle('system-check', async () => {
+  dlog('system-check: starting')
   const result = {
     os: { name: '', version: '', arch: '', supported: true },
     node: { installed: false, version: '', sufficient: false },
@@ -112,6 +126,7 @@ ipcMain.handle('system-check', async () => {
   // Node.js - check system PATH and ~/.openclaw/node/bin/
   const openclawNodeBin = path.join(os.homedir(), '.openclaw', 'node', 'bin')
   const envWithNode = { ...process.env, PATH: `${openclawNodeBin}:${process.env.PATH}` }
+  dlog(`system-check: looking for node, extra PATH: ${openclawNodeBin}`)
   try {
     const { stdout } = await execAsync('node --version', { env: envWithNode })
     const ver = stdout.trim()
@@ -119,24 +134,32 @@ ipcMain.handle('system-check', async () => {
     result.node.version = ver
     const major = parseInt(ver.replace('v', '').split('.')[0], 10)
     result.node.sufficient = major >= 22
-    // Update process PATH so subsequent checks (openclaw, npm) can find node
     process.env.PATH = `${openclawNodeBin}:${process.env.PATH}`
-  } catch { /* not installed */ }
+    dlog(`system-check: node found ${ver}, sufficient=${result.node.sufficient}`)
+  } catch (e: any) {
+    dlog(`system-check: node not found: ${e.message}`)
+  }
 
   // OpenClaw
+  dlog('system-check: looking for openclaw')
   try {
     const { stdout: whichOut } = await execAsync('which openclaw', { env: envWithNode })
+    dlog(`system-check: which openclaw = ${whichOut.trim()}`)
     if (whichOut.trim()) {
       result.openclaw.installed = true
       try {
-        const { stdout: verOut } = await execAsync('openclaw --version')
+        const { stdout: verOut } = await execAsync('openclaw --version', { env: envWithNode })
         result.openclaw.version = verOut.trim().split('\n')[0]
+        dlog(`system-check: openclaw version = ${result.openclaw.version}`)
       } catch {
         result.openclaw.version = 'installed (version unknown)'
       }
     }
-  } catch { /* not installed */ }
+  } catch (e: any) {
+    dlog(`system-check: openclaw not found: ${e.message}`)
+  }
 
+  dlog(`system-check: result = ${JSON.stringify(result)}`)
   return result
 })
 
@@ -147,6 +170,7 @@ ipcMain.handle('install-node', async (_event) => {
   const arch = process.arch
   const homeDir = os.homedir()
   const nodeDir = path.join(homeDir, '.openclaw', 'node')
+  dlog(`install-node: platform=${platform} arch=${arch} nodeDir=${nodeDir}`)
 
   // Get latest Node 22.x LTS version dynamically, fallback to known good version
   let NODE_VERSION = '22.14.0'
@@ -241,14 +265,17 @@ ipcMain.handle('install-openclaw', async (event) => {
       const openclawNodeBin = path.join(os.homedir(), '.openclaw', 'node', 'bin')
       const envPath = `${openclawNodeBin}:${process.env.PATH}`
       const spawnEnv = { ...process.env, PATH: envPath }
+      dlog(`install-openclaw: PATH includes ${openclawNodeBin}`)
 
       // Check if npm is available
       try {
-        require('child_process').execSync('npm --version', { stdio: 'ignore', env: spawnEnv })
-      } catch {
+        const npmVer = require('child_process').execSync('npm --version', { encoding: 'utf8', env: spawnEnv }).trim()
+        dlog(`install-openclaw: npm found, version ${npmVer}`)
+      } catch (npmErr: any) {
+        dlog(`install-openclaw: npm not found: ${npmErr.message}`)
         return resolve({ 
           success: false, 
-          error: 'npm not found', 
+          error: `npm not found (${npmErr.message})`, 
           manual: 'Install Node.js first, then retry' 
         })
       }
@@ -261,6 +288,7 @@ ipcMain.handle('install-openclaw', async (event) => {
       npmProcess.stdout?.on('data', (data) => {
         const output = data.toString().trim()
         if (output) {
+          dlog(`install-openclaw stdout: ${output}`)
           event.sender.send('install-progress', { type: 'stdout', data: output })
         }
       })
@@ -268,6 +296,7 @@ ipcMain.handle('install-openclaw', async (event) => {
       npmProcess.stderr?.on('data', (data) => {
         const output = data.toString().trim()
         if (output) {
+          dlog(`install-openclaw stderr: ${output}`)
           event.sender.send('install-progress', { type: 'stderr', data: output })
         }
       })

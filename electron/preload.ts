@@ -16,6 +16,7 @@ const ALLOWED_CHANNELS = new Set([
   'get-licenses',
   'open-channel',
   'open-external',
+  'get-debug-logs',
 ])
 
 contextBridge.exposeInMainWorld('electronAPI', {
