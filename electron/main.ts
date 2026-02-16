@@ -140,23 +140,58 @@ ipcMain.handle('system-check', async () => {
     dlog(`system-check: node not found: ${e.message}`)
   }
 
-  // OpenClaw
+  // OpenClaw - check multiple locations
   dlog('system-check: looking for openclaw')
+  const openclawPaths = [
+    path.join(os.homedir(), '.openclaw', 'node', 'bin', 'openclaw'),
+    path.join(os.homedir(), '.openclaw', 'bin', 'openclaw'),
+    '/usr/local/bin/openclaw',
+    '/opt/homebrew/bin/openclaw',
+  ]
+  let openclawBin = ''
+  // First try which with updated PATH
   try {
     const { stdout: whichOut } = await execAsync('which openclaw', { env: envWithNode })
-    dlog(`system-check: which openclaw = ${whichOut.trim()}`)
-    if (whichOut.trim()) {
-      result.openclaw.installed = true
+    if (whichOut.trim()) openclawBin = whichOut.trim()
+    dlog(`system-check: which openclaw = ${openclawBin}`)
+  } catch {
+    dlog('system-check: which openclaw failed, checking known paths')
+  }
+  // Fallback: check known paths directly
+  if (!openclawBin) {
+    for (const p of openclawPaths) {
       try {
-        const { stdout: verOut } = await execAsync('openclaw --version', { env: envWithNode })
-        result.openclaw.version = verOut.trim().split('\n')[0]
-        dlog(`system-check: openclaw version = ${result.openclaw.version}`)
-      } catch {
-        result.openclaw.version = 'installed (version unknown)'
-      }
+        await fs.promises.access(p, fs.constants.X_OK)
+        openclawBin = p
+        dlog(`system-check: found openclaw at ${p}`)
+        break
+      } catch { /* not here */ }
     }
-  } catch (e: any) {
-    dlog(`system-check: openclaw not found: ${e.message}`)
+  }
+  // Also check npm global bin
+  if (!openclawBin) {
+    try {
+      const { stdout: npmBin } = await execAsync('npm bin -g', { env: envWithNode })
+      const npmGlobalClaw = path.join(npmBin.trim(), 'openclaw')
+      await fs.promises.access(npmGlobalClaw, fs.constants.X_OK)
+      openclawBin = npmGlobalClaw
+      dlog(`system-check: found openclaw at npm global bin: ${npmGlobalClaw}`)
+    } catch {
+      dlog('system-check: openclaw not in npm global bin either')
+    }
+  }
+  if (openclawBin) {
+    result.openclaw.installed = true
+    try {
+      const { stdout: verOut } = await execAsync(`"${openclawBin}" --version`, { timeout: 5000 })
+      result.openclaw.version = verOut.trim().split('\n')[0]
+      dlog(`system-check: openclaw version = ${result.openclaw.version}`)
+    } catch {
+      result.openclaw.version = 'installed'
+      dlog('system-check: openclaw found but --version failed')
+    }
+  } else {
+    dlog('system-check: openclaw not found anywhere')
   }
 
   dlog(`system-check: result = ${JSON.stringify(result)}`)
