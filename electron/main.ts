@@ -478,10 +478,22 @@ ipcMain.handle('install-templates', async (_event, templates: string[]) => {
     }
 
     // Premium templates (require license verification)
+    // Key = template slug, Value = directory name
     const premiumTemplates: Record<string, string> = {
-      'productivity-pro': 'the-productivity-pro',
-      'research-assistant': 'the-research-assistant',
-      'creative-writer': 'the-creative-writer',
+      'freelancer': 'the-freelancer',
+      'content-machine': 'the-content-machine',
+      'dev-buddy': 'the-dev-buddy',
+      'executive-assistant': 'the-executive-assistant',
+      'sales-rep': 'the-sales-rep',
+    }
+
+    // Gumroad product IDs for each premium template
+    const gumroadProductIds: Record<string, string> = {
+      'freelancer': 'pelgup',
+      'content-machine': 'itrekp',
+      'dev-buddy': 'gqxlhq',
+      'executive-assistant': 'zozuc',
+      'sales-rep': 'zklmgo',
     }
 
     for (const tmpl of templates) {
@@ -543,8 +555,8 @@ ipcMain.handle('install-templates', async (_event, templates: string[]) => {
           
           try {
             const licenses = JSON.parse(fs.readFileSync(licPath, 'utf-8'))
-            const productId = premiumTemplates[tmpl]
-            hasValidLicense = licenses[productId]?.verified === true
+            const productId = gumroadProductIds[tmpl]
+            hasValidLicense = productId ? licenses[productId]?.verified === true : false
           } catch {
             // No license file or invalid JSON
           }
@@ -553,18 +565,48 @@ ipcMain.handle('install-templates', async (_event, templates: string[]) => {
             results.push({
               template: tmpl,
               status: 'error',
-              message: 'Premium template requires valid license'
+              message: 'Premium template requires valid license. Purchase at lizmacliz.gumroad.com'
             })
             continue
           }
           
-          // For premium templates, we would download from a secure endpoint
-          // For now, just mark as success since license is verified
-          results.push({
-            template: tmpl,
-            status: 'success',
-            message: 'Premium template access verified'
-          })
+          // License verified, install the premium template files
+          const dirName = premiumTemplates[tmpl]
+          let templateDir: string
+          if (app.isPackaged) {
+            templateDir = path.join(process.resourcesPath, 'templates', dirName)
+          } else {
+            templateDir = path.join(__dirname, '..', 'src', 'templates', dirName)
+          }
+
+          if (fs.existsSync(templateDir)) {
+            const files = fs.readdirSync(templateDir).filter(f => f.endsWith('.md'))
+            let installedCount = 0
+            for (const file of files) {
+              const src = path.join(templateDir, file)
+              const dest = path.join(workspaceDir, file)
+              if (fs.existsSync(dest)) {
+                const srcContent = fs.readFileSync(src, 'utf-8')
+                const destContent = fs.readFileSync(dest, 'utf-8')
+                if (srcContent === destContent) continue
+                const backupPath = dest + '.backup.' + Date.now()
+                fs.copyFileSync(dest, backupPath)
+              }
+              fs.copyFileSync(src, dest)
+              installedCount++
+            }
+            results.push({
+              template: tmpl,
+              status: 'success',
+              message: `Installed ${installedCount} premium template files`
+            })
+          } else {
+            results.push({
+              template: tmpl,
+              status: 'error',
+              message: 'Premium template files not found in app bundle'
+            })
+          }
         } else {
           results.push({
             template: tmpl,
