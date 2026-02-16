@@ -50,6 +50,18 @@
         ]
       }
     ],
+    "dmg": {
+      "icon": "build/icon.icns",
+      "iconSize": 128,
+      "contents": [
+        { "x": 170, "y": 210 },
+        { "x": 430, "y": 210, "type": "link", "path": "/Applications" }
+      ],
+      "window": {
+        "width": 600,
+        "height": 400
+      }
+    },
     "mac": {
       "target": "dmg",
       "icon": "build/icon.icns",
