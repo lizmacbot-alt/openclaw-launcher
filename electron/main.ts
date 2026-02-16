@@ -237,19 +237,25 @@ ipcMain.handle('install-node', async (_event) => {
 ipcMain.handle('install-openclaw', async (event) => {
   return new Promise((resolve) => {
     try {
+      // Ensure ~/.openclaw/node/bin is in PATH for npm
+      const openclawNodeBin = path.join(os.homedir(), '.openclaw', 'node', 'bin')
+      const envPath = `${openclawNodeBin}:${process.env.PATH}`
+      const spawnEnv = { ...process.env, PATH: envPath }
+
       // Check if npm is available
       try {
-        require('child_process').execSync('npm --version', { stdio: 'ignore' })
+        require('child_process').execSync('npm --version', { stdio: 'ignore', env: spawnEnv })
       } catch {
         return resolve({ 
           success: false, 
-          error: 'npm not found in PATH', 
-          manual: 'Install Node.js with npm from https://nodejs.org' 
+          error: 'npm not found', 
+          manual: 'Install Node.js first, then retry' 
         })
       }
 
       const npmProcess = spawn('npm', ['install', '-g', 'openclaw@latest'], {
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: spawnEnv
       })
 
       npmProcess.stdout?.on('data', (data) => {
@@ -268,19 +274,21 @@ ipcMain.handle('install-openclaw', async (event) => {
 
       npmProcess.on('close', async (code) => {
         if (code === 0) {
-          // Verify installation succeeded
+          // Verify installation succeeded (use updated PATH)
           try {
-            const { stdout } = await execAsync('openclaw --version', { timeout: 5000 })
+            const { stdout } = await execAsync('openclaw --version', { timeout: 5000, env: spawnEnv })
             event.sender.send('install-progress', { 
               type: 'success', 
               data: `Installation complete! OpenClaw ${stdout.trim().split('\n')[0]} is ready.` 
             })
+            // Update process PATH so re-check finds it
+            process.env.PATH = envPath
             resolve({ success: true })
           } catch {
             resolve({ 
               success: false, 
               error: 'Installation completed but OpenClaw command not found', 
-              manual: 'Try restarting your terminal or check PATH' 
+              manual: 'Try restarting the app' 
             })
           }
         } else {
