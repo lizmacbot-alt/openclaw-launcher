@@ -1,6 +1,6 @@
 {
   "name": "openclaw-launcher",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Beautiful desktop launcher for OpenClaw AI agents",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -54,8 +54,16 @@
       "icon": "build/icon.icns",
       "iconSize": 128,
       "contents": [
-        { "x": 170, "y": 210 },
-        { "x": 430, "y": 210, "type": "link", "path": "/Applications" }
+        {
+          "x": 170,
+          "y": 210
+        },
+        {
+          "x": 430,
+          "y": 210,
+          "type": "link",
+          "path": "/Applications"
+        }
       ],
       "window": {
         "width": 600,
