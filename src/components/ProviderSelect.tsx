@@ -30,11 +30,47 @@ const providers = [
   },
 ]
 
+const apiKeyProviders = [
+  { id: 'anthropic', name: 'Anthropic', placeholder: 'sk-ant-...', url: 'https://console.anthropic.com/settings/keys' },
+  { id: 'openai', name: 'OpenAI', placeholder: 'sk-...', url: 'https://platform.openai.com/api-keys' },
+  { id: 'google', name: 'Google', placeholder: 'AIza...', url: 'https://aistudio.google.com/apikey' },
+  { id: 'groq', name: 'Groq', placeholder: 'gsk_...', url: 'https://console.groq.com/keys' },
+  { id: 'openrouter', name: 'OpenRouter', placeholder: 'sk-or-...', url: 'https://openrouter.ai/keys' },
+  { id: 'xai', name: 'xAI (Grok)', placeholder: 'xai-...', url: 'https://console.x.ai/' },
+]
+
 export default function ProviderSelect() {
-  const { authCompleted, setProvider, setAuthCompleted, setScreen } = useSetupStore()
+  const { apiKey, authCompleted, setProvider, setApiKey, setAuthCompleted, setScreen } = useSetupStore()
   const [status, setStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [activeProvider, setActiveProvider] = useState<string | null>(null)
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [apiProvider, setApiProvider] = useState<string | null>(null)
+  const [verifying, setVerifying] = useState(false)
+  const [verifyError, setVerifyError] = useState<string | null>(null)
+
+  const verifyApiKey = async () => {
+    if (!apiProvider || !apiKey.trim()) return
+    setVerifying(true)
+    setVerifyError(null)
+    try {
+      const result = await ipcInvoke('verify-api-key', apiProvider, apiKey.trim())
+      if (result.valid) {
+        // Save via paste-token
+        await ipcInvoke('auth-paste-token', apiProvider, apiKey.trim()).catch(() => {})
+        setAuthCompleted(true)
+        setShowApiKey(false)
+        setStatus('success')
+        setActiveProvider(apiProvider)
+      } else {
+        setVerifyError(result.error || 'Invalid key')
+      }
+    } catch (e: any) {
+      setVerifyError(e.message)
+    } finally {
+      setVerifying(false)
+    }
+  }
 
   const handleLogin = async (p: typeof providers[0]) => {
     setActiveProvider(p.id)
@@ -128,6 +164,61 @@ export default function ProviderSelect() {
       {status === 'success' && (
         <div className="w-full max-w-md mb-4 terminal-card p-3 rounded-lg border-terminal-green/50 bg-terminal-green/10">
           <div className="text-xs text-terminal-green font-mono">✅ Signed in. Ready to continue.</div>
+        </div>
+      )}
+
+      {/* API Key option (hidden by default) */}
+      {!authCompleted && (
+        <div className="w-full max-w-md flex items-center gap-3 mb-4">
+          <div className="flex-1 border-t border-border/20"></div>
+          <button
+            onClick={() => setShowApiKey(!showApiKey)}
+            className="text-[11px] text-muted/50 hover:text-muted font-mono transition-colors"
+          >
+            {showApiKey ? 'Hide' : 'Or use an API key instead'}
+          </button>
+          <div className="flex-1 border-t border-border/20"></div>
+        </div>
+      )}
+
+      {showApiKey && !authCompleted && (
+        <div className="w-full max-w-md animate-in space-y-3 mb-4">
+          <div className="grid grid-cols-3 gap-2">
+            {apiKeyProviders.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => { setApiProvider(p.id); setProvider(p.id); setApiKey(''); setVerifyError(null); ipcInvoke('open-external', p.url).catch(() => {}) }}
+                className={`p-2 rounded-lg border text-center text-xs font-mono transition-all ${
+                  apiProvider === p.id ? 'border-claw bg-claw/10 text-claw' : 'border-border/30 text-muted hover:border-claw/30'
+                }`}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+
+          {apiProvider && (
+            <div className="flex gap-2">
+              <input
+                type="password"
+                placeholder={apiKeyProviders.find(p => p.id === apiProvider)?.placeholder || 'Paste API key...'}
+                value={apiKey}
+                onChange={(e) => { setApiKey(e.target.value); setVerifyError(null) }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && apiKey.trim()) verifyApiKey() }}
+                autoFocus
+                className="flex-1 bg-bg border border-border rounded-lg px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-claw transition-colors"
+              />
+              <button
+                onClick={verifyApiKey}
+                disabled={!apiKey.trim() || verifying}
+                className="bg-claw hover:bg-claw/80 disabled:bg-surface disabled:text-muted text-white px-5 py-2.5 rounded-lg text-sm font-mono font-bold transition-all"
+              >
+                {verifying ? '...' : 'Save'}
+              </button>
+            </div>
+          )}
+
+          {verifyError && <div className="text-error text-xs font-mono">❌ {verifyError}</div>}
         </div>
       )}
 
