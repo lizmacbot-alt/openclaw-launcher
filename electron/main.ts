@@ -31,6 +31,20 @@ function createWindow() {
     },
   })
 
+  // Set CSP in production
+  if (!process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.anthropic.com https://api.openai.com https://generativelanguage.googleapis.com https://api.gumroad.com https://api.groq.com https://openrouter.ai http://localhost:18789;"
+          ]
+        }
+      })
+    })
+  }
+
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
   } else {
@@ -488,6 +502,10 @@ ipcMain.handle('get-licenses', async () => {
 // ── IPC: open-external ──
 
 ipcMain.handle('open-external', async (_event, url: string) => {
+  // Only allow http/https URLs to prevent file:// or custom protocol abuse
+  if (typeof url !== 'string' || (!url.startsWith('https://') && !url.startsWith('http://'))) {
+    return { success: false, error: 'Only http/https URLs are allowed' }
+  }
   shell.openExternal(url)
   return { success: true }
 })
