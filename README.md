@@ -1,92 +1,114 @@
-# OpenClaw Launcher
+# 🦞 OpenClaw Launcher
 
-A beautiful desktop application for installing and managing OpenClaw AI agents.
+The easy way to set up [OpenClaw](https://openclaw.ai). No terminal, no config files, no headaches.
 
-## Features
+OpenClaw is an open-source AI agent that lives on your computer. It can talk to you on Telegram, Discord, WhatsApp, or just in the browser. The Launcher handles the entire setup in about 2 minutes.
 
-- **Easy Installation**: No terminal commands required - install OpenClaw with a few clicks
-- **Complete Onboarding**: Step-by-step wizard to set up your AI provider and chat channels
-- **Template Marketplace**: Browse and install personality templates for your agent
-- **Agent Management**: Start, stop, monitor, and configure your running agent
-- **Professional UI**: Dark theme with smooth animations and modern design
+![OpenClaw Launcher Welcome Screen](https://lizmacliz.com/images/launcher-welcome.png)
 
-## Tech Stack
+## What it does
 
-- **Electron 33+** - Cross-platform desktop app framework
-- **React 19** - Modern UI framework with TypeScript
-- **Vite** - Fast build tool and dev server
-- **Tailwind CSS** - Utility-first CSS framework
-- **Zustand** - Lightweight state management
-- **Framer Motion** - Smooth animations and transitions
+1. **Checks your system** and auto-installs Node.js if you don't have it
+2. **Installs OpenClaw** (the actual agent runtime)
+3. **Connects your AI provider** (Claude, ChatGPT, Gemini, Groq, OpenRouter, xAI)
+4. **Sets up a chat channel** (Telegram, Discord, WhatsApp, Signal, or browser)
+5. **Installs agent templates** so your agent has a personality out of the box
+6. **Starts the agent** and you're done
+
+The whole thing is a step-by-step wizard. Click, click, click, you have a personal AI agent running locally.
+
+## Download
+
+Grab the latest release for your platform:
+
+- **macOS** (.dmg): [Download](https://lizmacliz.com/api/download?platform=mac)
+- **Windows** (.exe): [Download](https://lizmacliz.com/api/download?platform=windows)
+- **Linux** (.AppImage): [Download](https://lizmacliz.com/api/download?platform=linux)
+
+Or check the [Releases](https://github.com/lizmacbot-alt/openclaw-launcher/releases) page.
+
+## Templates
+
+The Launcher comes with free agent templates you can install during setup:
+
+- **The Starter** (free) - Simple personal assistant, good starting point
+- **The Note Taker** (free) - Captures and organizes your notes
+
+More templates (premium) available at [lizmacliz.com/templates](https://lizmacliz.com/templates).
 
 ## Development
 
-### Prerequisites
-
-- Node.js 18+ 
-- npm or yarn
-
-### Setup
-
 ```bash
-# Clone the repository
 git clone https://github.com/lizmacbot-alt/openclaw-launcher.git
 cd openclaw-launcher
-
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
 ```
 
-The app will open at `http://localhost:5173` in your browser for development.
+That opens the app in dev mode with hot reload. The Electron window connects to Vite's dev server.
 
-### Build
+### Building
 
 ```bash
-# Build for production
-npm run build
-
-# Package as desktop app
-npm run package
+npm run build          # Build the app
+npx electron-builder   # Package for your platform
 ```
 
-## Project Structure
+### Project structure
 
 ```
 src/
-├── components/
-│   ├── common/          # Reusable UI components
-│   ├── Welcome.tsx      # Welcome screen
-│   ├── SystemCheck.tsx  # System validation
-│   ├── ProviderSelect.tsx # AI provider setup
-│   ├── ChannelSetup.tsx # Chat channel config
-│   ├── TemplateMarketplace.tsx # Template selection
-│   ├── SetupComplete.tsx # Success screen
-│   └── AgentManager.tsx # Post-setup management
-├── stores/
-│   └── setup-store.ts   # Zustand state management
-├── styles/
-│   └── globals.css      # Global styles and Tailwind
-└── main.tsx            # React app entry point
+  components/     # React screens (Welcome, SystemCheck, ProviderSelect, etc.)
+  stores/         # Zustand state
+  lib/            # IPC helpers
+  templates/      # Bundled free templates (.md files)
+  globals.css     # Tailwind + custom theme
 
 electron/
-├── main.ts             # Electron main process
-└── preload.ts          # IPC bridge
+  main.ts         # Electron main process, all IPC handlers
+  preload.ts      # Context bridge (whitelisted IPC channels only)
 ```
 
-## Design System
+### Tech
 
-- **Background**: `#0f0f0f` (near black)
-- **Surface**: `#1a1a1a` (cards, inputs)  
-- **Border**: `#2a2a2a`
-- **Primary**: `#e8837c` (coral)
-- **Primary Hover**: `#f09990`
-- **Text**: `#f5f5f5`
-- **Text Muted**: `#a3a3a3`
-- **Font**: Inter with system fallback
+- Electron + React 19 + TypeScript
+- Vite for builds
+- Tailwind CSS
+- Zustand for state
+- node-pty for terminal auth flows
+
+## The UI
+
+CRT-inspired dark theme. Scanlines, grid background, pixel-font step indicator, lobster claw cursors. It's a little weird on purpose.
+
+Colors: OpenClaw red (`#e8837c`), terminal green, cyan accents on a near-black background.
+
+## How auth works
+
+Two paths:
+
+1. **Browser login** (recommended): Clicks "Claude" / "ChatGPT" / "Gemini", opens a PTY running `openclaw models auth setup-token`, which handles the OAuth flow. Token gets saved automatically.
+2. **API key** (fallback): Pick a provider, open their key page, paste the key. Verified via API call, saved via `openclaw models auth paste-token`.
+
+## Security
+
+- Context isolation enabled, `nodeIntegration: false`
+- IPC channels whitelisted in preload (only 18 specific channels allowed)
+- CSP headers in production
+- URLs validated before `shell.openExternal`
+- macOS builds are code-signed and notarized
+- API keys never leave your machine (saved to `~/.openclaw/` via the OpenClaw CLI)
+
+## Contributing
+
+Issues and PRs welcome. If you find a bug during setup, click the "📋 logs" button in the bottom-left corner and paste the debug logs in your issue. That helps a lot.
 
 ## License
 
 MIT
+
+## Links
+
+- [OpenClaw](https://openclaw.ai) (the agent itself)
+- [lizmacliz.com](https://lizmacliz.com) (templates + blog)
+- [Gumroad store](https://lizmacliz.gumroad.com) (premium templates)
