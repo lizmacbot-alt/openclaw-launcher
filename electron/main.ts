@@ -332,9 +332,14 @@ ipcMain.handle('install-openclaw', async (event) => {
             resolve({ success: true })
           } else {
             // Fallback to npm
-            dlog('install-openclaw: install script failed, trying npm fallback')
+            dlog('install-openclaw: install script failed, trying npm fallback with --prefix')
             try {
-              await execAsync('npm install -g openclaw@latest', { timeout: 120000, env: spawnEnv })
+              const nodePrefix = path.join(os.homedir(), '.openclaw', 'node')
+              const npmCmd = `npm install -g openclaw@latest --prefix "${nodePrefix}"`
+              dlog(`install-openclaw: running: ${npmCmd}`)
+              const { stdout: npmOut, stderr: npmErr2 } = await execAsync(npmCmd, { timeout: 120000, env: spawnEnv })
+              dlog(`install-openclaw: npm stdout: ${npmOut.trim()}`)
+              if (npmErr2.trim()) dlog(`install-openclaw: npm stderr: ${npmErr2.trim()}`)
               dlog('install-openclaw: npm fallback succeeded')
               process.env.PATH = envPath
               resolve({ success: true })
@@ -363,7 +368,8 @@ ipcMain.handle('install-openclaw', async (event) => {
           return resolve({ success: false, error: 'npm not found', manual: 'Install Node.js first, then retry' })
         }
 
-        const npmProcess = spawn('npm', ['install', '-g', 'openclaw@latest'], {
+        const nodePrefix = path.join(os.homedir(), '.openclaw', 'node')
+        const npmProcess = spawn('npm', ['install', '-g', 'openclaw@latest', '--prefix', nodePrefix], {
           stdio: ['ignore', 'pipe', 'pipe'],
           env: spawnEnv
         })
