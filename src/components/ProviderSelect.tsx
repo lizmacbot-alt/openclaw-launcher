@@ -44,6 +44,7 @@ export default function ProviderSelect() {
   const [status, setStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [activeProvider, setActiveProvider] = useState<string | null>(null)
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [showApiKey, setShowApiKey] = useState(false)
   const [apiProvider, setApiProvider] = useState<string | null>(null)
   const [verifying, setVerifying] = useState(false)
@@ -72,11 +73,21 @@ export default function ProviderSelect() {
     }
   }
 
+  // Listen for status updates from the PTY
+  useState(() => {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.on) {
+      (window as any).electronAPI.on('auth-status', (data: { provider: string; message: string }) => {
+        setStatusMsg(data.message)
+      })
+    }
+  })
+
   const handleLogin = async (p: typeof providers[0]) => {
     setActiveProvider(p.id)
     setProvider(p.id)
     setStatus('running')
     setError(null)
+    setStatusMsg('Starting login...')
 
     try {
       const result = await ipcInvoke('auth-setup-token', p.id)
@@ -149,8 +160,7 @@ export default function ProviderSelect() {
       {status === 'running' && (
         <div className="w-full max-w-md mb-4 terminal-card p-3 rounded-lg border-cyan/30 bg-cyan/5">
           <div className="text-xs text-cyan font-mono">
-            A Terminal window opened with the login flow.
-            Complete the sign-in there, then come back here.
+            {statusMsg || 'Setting up login...'}
           </div>
         </div>
       )}

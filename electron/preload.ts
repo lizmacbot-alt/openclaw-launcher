@@ -20,6 +20,7 @@ const ALLOWED_CHANNELS = new Set([
   'auth-login',
   'auth-paste-token',
   'auth-setup-token',
+  'auth-status',
 ])
 
 contextBridge.exposeInMainWorld('electronAPI', {

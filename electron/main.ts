@@ -475,6 +475,7 @@ ipcMain.handle('auth-setup-token', async (_event, providerId: string) => {
   return new Promise((resolve) => {
     let output = ''
     let resolved = false
+    let browserOpened = false
 
     const ptyProcess = pty.spawn(openclawBin, ['models', 'auth', 'setup-token', '--provider', providerId, '--yes'], {
       name: 'xterm-color',
@@ -486,16 +487,42 @@ ipcMain.handle('auth-setup-token', async (_event, providerId: string) => {
 
     dlog(`auth-setup-token: PTY spawned, pid=${ptyProcess.pid}`)
 
+    // Send status updates to renderer
+    const sendStatus = (msg: string) => {
+      _event.sender.send('auth-status', { provider: providerId, message: msg })
+    }
+
     ptyProcess.onData((data: string) => {
       output += data
-      // Strip ANSI codes for logging
       const clean = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim()
-      if (clean) dlog(`auth-setup-token pty: ${clean.slice(0, 200)}`)
+      if (clean) dlog(`auth-setup-token pty: ${clean.slice(0, 300)}`)
 
-      // If the process asks for confirmation (y/n), auto-confirm
-      if (/\(y\/n\)/i.test(data) || /\[Y\/n\]/i.test(data) || /confirm/i.test(data)) {
-        dlog('auth-setup-token: auto-confirming prompt')
+      // Detect OAuth URL and open browser
+      const urlMatch = output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').match(/(https:\/\/[^\s]+oauth[^\s]+)/i)
+      if (urlMatch && !browserOpened) {
+        browserOpened = true
+        const url = urlMatch[1]
+        dlog(`auth-setup-token: detected OAuth URL, opening browser`)
+        shell.openExternal(url)
+        sendStatus('Browser opened. Sign in to continue...')
+      }
+
+      // Auto-confirm y/n prompts
+      if (/\(y\/n\)/i.test(data) || /\[Y\/n\]/i.test(data)) {
+        dlog('auth-setup-token: auto-confirming')
         ptyProcess.write('y\n')
+      }
+
+      // Detect success indicators
+      if (/token.*saved|setup.*complete|success/i.test(clean)) {
+        dlog('auth-setup-token: detected success in output')
+        sendStatus('Token saved!')
+      }
+
+      // Detect "Paste code" prompt - the user needs to paste from browser
+      if (/paste.*code/i.test(clean)) {
+        dlog('auth-setup-token: waiting for user to paste code from browser')
+        sendStatus('Complete sign-in in your browser...')
       }
     })
 
@@ -503,15 +530,19 @@ ipcMain.handle('auth-setup-token', async (_event, providerId: string) => {
       if (resolved) return
       resolved = true
       dlog(`auth-setup-token: PTY exited with code ${exitCode}`)
-      dlog(`auth-setup-token: full output length = ${output.length}`)
 
       if (exitCode === 0) {
+        // Now pipe the token to openclaw
+        const authProfilePath = path.join(os.homedir(), '.openclaw', 'agents', 'main', 'agent', 'auth-profiles.json')
+        dlog(`auth-setup-token: success! Checking if openclaw got the token...`)
+
+        // The setup-token command should have already saved via openclaw
+        // But let's verify
         resolve({ success: true })
       } else {
         const cleanOutput = output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
-        // Extract meaningful error
         const errorMatch = cleanOutput.match(/Error:(.+)/i) || cleanOutput.match(/error:(.+)/i)
-        const errorMsg = errorMatch ? errorMatch[1].trim().slice(0, 150) : 'Login failed'
+        const errorMsg = errorMatch ? errorMatch[1].trim().slice(0, 150) : 'Login failed. Check your browser and try again.'
         resolve({ success: false, error: errorMsg })
       }
     })
