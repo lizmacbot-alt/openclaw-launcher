@@ -6,6 +6,7 @@ import fs from 'fs'
 import https from 'https'
 import http from 'http'
 import os from 'os'
+import * as pty from 'node-pty'
 
 const execAsync = promisify(exec)
 const readFile = promisify(fs.readFile)
@@ -444,8 +445,8 @@ ipcMain.handle('auth-paste-token', async (_event, providerId: string, token: str
 })
 
 // ── IPC: auth-setup-token ──
-// Opens Terminal.app with `openclaw models auth setup-token --provider <id>`
-// This runs the provider's CLI login (opens browser), gets a token, saves it
+// Runs `openclaw models auth setup-token` in a hidden PTY (no visible terminal)
+// The command opens the user's browser for OAuth, gets a token, saves it
 
 ipcMain.handle('auth-setup-token', async (_event, providerId: string) => {
   const openclawNodeBin = path.join(os.homedir(), '.openclaw', 'node', 'bin')
@@ -471,87 +472,59 @@ ipcMain.handle('auth-setup-token', async (_event, providerId: string) => {
 
   dlog(`auth-setup-token: binary=${openclawBin}`)
 
-  const platform = process.platform
-  const markerFile = path.join(os.tmpdir(), `openclaw-auth-${Date.now()}`)
-  const successMarker = `${markerFile}.ok`
-  const failMarker = `${markerFile}.fail`
+  return new Promise((resolve) => {
+    let output = ''
+    let resolved = false
 
-  if (platform === 'darwin') {
-    const script = [
-      '#!/bin/bash',
-      `export PATH="${openclawNodeBin}:$PATH"`,
-      'clear',
-      'echo ""',
-      'echo "🦞 OpenClaw Login"',
-      'echo "=================="',
-      'echo ""',
-      'echo "Follow the prompts below to connect your AI account."',
-      'echo "A browser window will open for you to sign in."',
-      'echo ""',
-      `"${openclawBin}" models auth setup-token --provider ${providerId} --yes`,
-      'EXIT_CODE=$?',
-      'echo ""',
-      'if [ $EXIT_CODE -eq 0 ]; then',
-      `  echo "done" > "${successMarker}"`,
-      '  echo "✅ Login successful! You can close this window."',
-      'else',
-      `  echo "fail" > "${failMarker}"`,
-      '  echo "❌ Login failed (exit code $EXIT_CODE). Close this window and try again."',
-      'fi',
-      'echo ""',
-      'echo "Press any key to close..."',
-      'read -n 1',
-    ].join('\n')
+    const ptyProcess = pty.spawn(openclawBin, ['models', 'auth', 'setup-token', '--provider', providerId, '--yes'], {
+      name: 'xterm-color',
+      cols: 120,
+      rows: 30,
+      cwd: os.homedir(),
+      env: { ...process.env, PATH: envPath, TERM: 'xterm-256color' } as Record<string, string>,
+    })
 
-    const scriptPath = `${markerFile}.sh`
-    await fs.promises.writeFile(scriptPath, script, { mode: 0o755 })
-    dlog(`auth-setup-token: script at ${scriptPath}`)
+    dlog(`auth-setup-token: PTY spawned, pid=${ptyProcess.pid}`)
 
-    try {
-      await execAsync(`open -a Terminal.app "${scriptPath}"`)
-      dlog('auth-setup-token: Terminal.app opened')
-    } catch (e: any) {
-      dlog(`auth-setup-token: could not open Terminal: ${e.message}`)
-      await fs.promises.unlink(scriptPath).catch(() => {})
-      return { success: false, error: 'Could not open Terminal.' }
-    }
+    ptyProcess.onData((data: string) => {
+      output += data
+      // Strip ANSI codes for logging
+      const clean = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim()
+      if (clean) dlog(`auth-setup-token pty: ${clean.slice(0, 200)}`)
 
-    // Poll for result (up to 3 minutes)
-    const deadline = Date.now() + 180000
-    while (Date.now() < deadline) {
-      try {
-        await fs.promises.access(successMarker)
-        // Cleanup
-        await fs.promises.unlink(successMarker).catch(() => {})
-        await fs.promises.unlink(scriptPath).catch(() => {})
-        dlog('auth-setup-token: success marker found')
+      // If the process asks for confirmation (y/n), auto-confirm
+      if (/\(y\/n\)/i.test(data) || /\[Y\/n\]/i.test(data) || /confirm/i.test(data)) {
+        dlog('auth-setup-token: auto-confirming prompt')
+        ptyProcess.write('y\n')
+      }
+    })
 
-        // Verify auth actually works
-        try {
-          const { stdout } = await execAsync(`"${openclawBin}" models status`, { timeout: 10000, env: { ...process.env, PATH: envPath } })
-          dlog(`auth-setup-token: models status = ${stdout.trim().slice(0, 200)}`)
-        } catch {}
+    ptyProcess.onExit(({ exitCode }) => {
+      if (resolved) return
+      resolved = true
+      dlog(`auth-setup-token: PTY exited with code ${exitCode}`)
+      dlog(`auth-setup-token: full output length = ${output.length}`)
 
-        return { success: true }
-      } catch {}
+      if (exitCode === 0) {
+        resolve({ success: true })
+      } else {
+        const cleanOutput = output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+        // Extract meaningful error
+        const errorMatch = cleanOutput.match(/Error:(.+)/i) || cleanOutput.match(/error:(.+)/i)
+        const errorMsg = errorMatch ? errorMatch[1].trim().slice(0, 150) : 'Login failed'
+        resolve({ success: false, error: errorMsg })
+      }
+    })
 
-      try {
-        await fs.promises.access(failMarker)
-        await fs.promises.unlink(failMarker).catch(() => {})
-        await fs.promises.unlink(scriptPath).catch(() => {})
-        dlog('auth-setup-token: fail marker found')
-        return { success: false, error: 'Login failed in terminal. Try again or check the terminal output.' }
-      } catch {}
-
-      await new Promise(r => setTimeout(r, 1000))
-    }
-
-    await fs.promises.unlink(scriptPath).catch(() => {})
-    return { success: false, error: 'Login timed out (3 min). Try again.' }
-  } else {
-    // Linux/Windows: similar but with different terminal emulators
-    return { success: false, error: 'Login flow not yet supported on this platform. Use API key instead.' }
-  }
+    // Timeout after 3 minutes
+    setTimeout(() => {
+      if (resolved) return
+      resolved = true
+      dlog('auth-setup-token: timed out')
+      try { ptyProcess.kill() } catch {}
+      resolve({ success: false, error: 'Login timed out (3 min). Try again.' })
+    }, 180000)
+  })
 })
 
 // ── IPC: auth-login (legacy, opens terminal) ──
