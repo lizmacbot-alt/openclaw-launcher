@@ -261,107 +261,93 @@ ipcMain.handle('install-node', async (_event) => {
 ipcMain.handle('install-openclaw', async (event) => {
   return new Promise((resolve) => {
     try {
-      // Ensure ~/.openclaw/node/bin is in PATH for npm
+      const platform = process.platform
       const openclawNodeBin = path.join(os.homedir(), '.openclaw', 'node', 'bin')
       const envPath = `${openclawNodeBin}:${process.env.PATH}`
       const spawnEnv = { ...process.env, PATH: envPath }
-      dlog(`install-openclaw: PATH includes ${openclawNodeBin}`)
 
-      // Check if npm is available
-      try {
-        const npmVer = require('child_process').execSync('npm --version', { encoding: 'utf8', env: spawnEnv }).trim()
-        dlog(`install-openclaw: npm found, version ${npmVer}`)
-      } catch (npmErr: any) {
-        dlog(`install-openclaw: npm not found: ${npmErr.message}`)
-        return resolve({ 
-          success: false, 
-          error: `npm not found (${npmErr.message})`, 
-          manual: 'Install Node.js first, then retry' 
+      if (platform === 'darwin' || platform === 'linux') {
+        // Use the official OpenClaw install script
+        dlog('install-openclaw: using official install script (curl https://openclaw.ai/install.sh)')
+        const installProcess = spawn('bash', ['-c', 'curl -fsSL https://openclaw.ai/install.sh | bash'], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: spawnEnv
         })
+
+        installProcess.stdout?.on('data', (data) => {
+          const output = data.toString().trim()
+          if (output) {
+            dlog(`install-openclaw stdout: ${output}`)
+            event.sender.send('install-progress', { type: 'stdout', data: output })
+          }
+        })
+
+        installProcess.stderr?.on('data', (data) => {
+          const output = data.toString().trim()
+          if (output) {
+            dlog(`install-openclaw stderr: ${output}`)
+            event.sender.send('install-progress', { type: 'stderr', data: output })
+          }
+        })
+
+        installProcess.on('close', async (code) => {
+          dlog(`install-openclaw: install script exited with code ${code}`)
+          if (code === 0) {
+            process.env.PATH = envPath
+            resolve({ success: true })
+          } else {
+            // Fallback to npm
+            dlog('install-openclaw: install script failed, trying npm fallback')
+            try {
+              await execAsync('npm install -g openclaw@latest', { timeout: 120000, env: spawnEnv })
+              dlog('install-openclaw: npm fallback succeeded')
+              process.env.PATH = envPath
+              resolve({ success: true })
+            } catch (npmErr: any) {
+              dlog(`install-openclaw: npm fallback failed: ${npmErr.message}`)
+              resolve({ success: false, error: `Install script and npm both failed`, manual: 'Run in terminal: curl -fsSL https://openclaw.ai/install.sh | bash' })
+            }
+          }
+        })
+
+        installProcess.on('error', (error) => {
+          dlog(`install-openclaw: spawn error: ${error.message}`)
+          resolve({ success: false, error: error.message, manual: 'Run in terminal: curl -fsSL https://openclaw.ai/install.sh | bash' })
+        })
+
+        setTimeout(() => {
+          installProcess.kill('SIGTERM')
+          resolve({ success: false, error: 'Installation timed out after 3 minutes', manual: 'Run in terminal: curl -fsSL https://openclaw.ai/install.sh | bash' })
+        }, 180000)
+      } else {
+        // Windows: npm install
+        dlog('install-openclaw: Windows, using npm install')
+        try {
+          require('child_process').execSync('npm --version', { stdio: 'ignore', env: spawnEnv })
+        } catch {
+          return resolve({ success: false, error: 'npm not found', manual: 'Install Node.js first, then retry' })
+        }
+
+        const npmProcess = spawn('npm', ['install', '-g', 'openclaw@latest'], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: spawnEnv
+        })
+
+        npmProcess.on('close', async (code) => {
+          dlog(`install-openclaw: npm exited with code ${code}`)
+          process.env.PATH = envPath
+          resolve(code === 0 ? { success: true } : { success: false, manual: 'Run: npm install -g openclaw@latest' })
+        })
+
+        npmProcess.on('error', (error) => {
+          resolve({ success: false, error: error.message })
+        })
+
+        setTimeout(() => {
+          npmProcess.kill('SIGTERM')
+          resolve({ success: false, error: 'Timed out' })
+        }, 180000)
       }
-
-      const npmProcess = spawn('npm', ['install', '-g', 'openclaw@latest'], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: spawnEnv
-      })
-
-      npmProcess.stdout?.on('data', (data) => {
-        const output = data.toString().trim()
-        if (output) {
-          dlog(`install-openclaw stdout: ${output}`)
-          event.sender.send('install-progress', { type: 'stdout', data: output })
-        }
-      })
-
-      npmProcess.stderr?.on('data', (data) => {
-        const output = data.toString().trim()
-        if (output) {
-          dlog(`install-openclaw stderr: ${output}`)
-          event.sender.send('install-progress', { type: 'stderr', data: output })
-        }
-      })
-
-      npmProcess.on('close', async (code) => {
-        dlog(`install-openclaw: npm exited with code ${code}`)
-        if (code === 0) {
-          // Check where npm put the binary
-          try {
-            const { stdout: prefix } = await execAsync('npm prefix -g', { env: spawnEnv })
-            dlog(`install-openclaw: npm global prefix = ${prefix.trim()}`)
-            const { stdout: binDir } = await execAsync('npm bin -g', { env: spawnEnv })
-            dlog(`install-openclaw: npm global bin = ${binDir.trim()}`)
-          } catch (e: any) {
-            dlog(`install-openclaw: could not get npm prefix/bin: ${e.message}`)
-          }
-
-          // Try multiple ways to find openclaw
-          try {
-            const { stdout: whichOut } = await execAsync('which openclaw', { env: spawnEnv })
-            dlog(`install-openclaw: which openclaw = ${whichOut.trim()}`)
-          } catch {
-            dlog('install-openclaw: which openclaw failed')
-          }
-
-          // Try ls on the expected bin dir
-          try {
-            const ocNodeBin = path.join(os.homedir(), '.openclaw', 'node', 'bin')
-            const { stdout: lsOut } = await execAsync(`ls -la "${ocNodeBin}/openclaw" 2>/dev/null || ls -la "${ocNodeBin}/" | grep -i claw || echo "not found in ${ocNodeBin}"`)
-            dlog(`install-openclaw: bin check = ${lsOut.trim()}`)
-          } catch (e: any) {
-            dlog(`install-openclaw: bin check failed: ${e.message}`)
-          }
-
-          // Verify with explicit path first, then PATH
-          try {
-            const ocBin = path.join(os.homedir(), '.openclaw', 'node', 'bin', 'openclaw')
-            const { stdout } = await execAsync(`"${ocBin}" --version || openclaw --version`, { timeout: 10000, env: spawnEnv })
-            dlog(`install-openclaw: verify success = ${stdout.trim()}`)
-            process.env.PATH = envPath
-            resolve({ success: true })
-          } catch (verifyErr: any) {
-            dlog(`install-openclaw: verify failed: ${verifyErr.message}`)
-            // npm install succeeded, so openclaw is there somewhere. Update PATH and trust it.
-            process.env.PATH = envPath
-            resolve({ success: true })
-          }
-        } else {
-          const errorMsg = code === 1 ? 'Permission denied - try running with sudo or admin rights' :
-                          code === 126 ? 'Command not executable' :
-                          code === 127 ? 'Command not found' :
-                          `Process exited with code ${code}`
-          resolve({ success: false, error: errorMsg, manual: 'Run in terminal: npm install -g openclaw@latest' })
-        }
-      })
-
-      npmProcess.on('error', (error) => {
-        resolve({ success: false, error: error.message, manual: 'Run in terminal: npm install -g openclaw@latest' })
-      })
-
-      // Set timeout
-      setTimeout(() => {
-        npmProcess.kill('SIGTERM')
-        resolve({ success: false, error: 'Installation timed out after 2 minutes', manual: 'Run in terminal: npm install -g openclaw@latest' })
-      }, 120000)
 
     } catch (e: any) {
       resolve({ success: false, error: e.message, manual: 'Run in terminal: npm install -g openclaw@latest' })
