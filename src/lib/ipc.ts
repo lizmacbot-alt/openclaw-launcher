@@ -52,6 +52,24 @@ async function browserMock(channel: string, args: any[]): Promise<any> {
       return { success: false, manual: 'Download from https://nodejs.org' }
     case 'install-openclaw':
       return { success: false, manual: 'Run: npm install -g openclaw@latest' }
+    case 'get-api-usage':
+      return {
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-20250514',
+        tokensUsed: 142850,
+        tokenLimit: 1000000,
+        estimatedCost: 4.28,
+        period: 'Feb 1 - Feb 28, 2026',
+      }
+    case 'get-agent-logs':
+      return [
+        { timestamp: '12:00:00', level: 'info', message: 'Gateway started on port 18789' },
+        { timestamp: '12:00:05', level: 'info', message: 'Anthropic provider connected' },
+        { timestamp: '12:00:10', level: 'warn', message: 'Rate limit approaching (80% of quota)' },
+        { timestamp: '12:00:15', level: 'info', message: 'Processing incoming message' },
+        { timestamp: '12:00:20', level: 'error', message: 'Webhook timeout, retrying in 5s' },
+        { timestamp: '12:00:25', level: 'info', message: 'Heartbeat check passed' },
+      ]
     case 'open-channel':
     case 'open-external':
       return { success: true }

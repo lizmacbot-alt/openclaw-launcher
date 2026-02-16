@@ -21,7 +21,11 @@ interface SetupState {
   setAgentRunning: (r: boolean) => void
 }
 
-export const useSetupStore = create<SetupState>((set) => ({
+export const useSetupStore = create<SetupState>((set, get) => {
+  if (typeof window !== 'undefined') {
+    (window as any).__store = { get, set: (s: Partial<SetupState>) => set(s) }
+  }
+  return {
   screen: 'welcome',
   provider: null,
   apiKey: '',
@@ -42,4 +46,4 @@ export const useSetupStore = create<SetupState>((set) => ({
       : [...s.selectedTemplates, id],
   })),
   setAgentRunning: (agentRunning) => set({ agentRunning }),
-}))
+}})
