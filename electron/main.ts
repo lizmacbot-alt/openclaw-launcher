@@ -396,9 +396,54 @@ ipcMain.handle('install-openclaw', async (event) => {
   })
 })
 
-// ── IPC: auth-login ──
-// Runs the OpenClaw auth login flow (OAuth/CLI login) for a provider
-// This opens the user's browser for authentication
+// ── IPC: auth-paste-token ──
+// Saves an API key using OpenClaw's native auth system
+
+ipcMain.handle('auth-paste-token', async (_event, providerId: string, token: string) => {
+  const openclawNodeBin = path.join(os.homedir(), '.openclaw', 'node', 'bin')
+  const envPath = `${openclawNodeBin}:${process.env.PATH}`
+
+  dlog(`auth-paste-token: provider=${providerId}`)
+
+  // Find openclaw binary
+  let openclawBin = ''
+  const possiblePaths = [
+    path.join(openclawNodeBin, 'openclaw'),
+    '/usr/local/bin/openclaw',
+    '/opt/homebrew/bin/openclaw',
+  ]
+  for (const p of possiblePaths) {
+    try {
+      await fs.promises.access(p, fs.constants.X_OK)
+      openclawBin = p
+      break
+    } catch { /* not here */ }
+  }
+  if (!openclawBin) {
+    try {
+      const { stdout } = await execAsync('which openclaw', { env: { ...process.env, PATH: envPath } })
+      openclawBin = stdout.trim()
+    } catch { /* not found */ }
+  }
+
+  if (!openclawBin) {
+    dlog('auth-paste-token: openclaw not found, will save key to config directly')
+    return { success: false, error: 'OpenClaw CLI not found' }
+  }
+
+  try {
+    const cmd = `echo "${token}" | "${openclawBin}" models auth paste-token --provider ${providerId}`
+    dlog(`auth-paste-token: running paste-token`)
+    await execAsync(cmd, { timeout: 15000, env: { ...process.env, PATH: envPath } })
+    dlog('auth-paste-token: success')
+    return { success: true }
+  } catch (e: any) {
+    dlog(`auth-paste-token: failed: ${e.message}`)
+    return { success: false, error: e.message }
+  }
+})
+
+// ── IPC: auth-login (legacy, opens terminal) ──
 
 ipcMain.handle('auth-login', async (_event, providerId: string, authChoice: string) => {
   const openclawNodeBin = path.join(os.homedir(), '.openclaw', 'node', 'bin')
