@@ -11,7 +11,7 @@
 
 body { 
   -webkit-app-region: drag; 
-  background: #050810;
+  background: #0c1220;
   overflow: hidden;
 }
 
@@ -36,41 +36,10 @@ button:active, a:active {
 /* Terminal CRT Effects */
 .crt-screen {
   position: relative;
-  background: linear-gradient(135deg, #050810 0%, #0a0f1a 100%);
+  background: linear-gradient(135deg, #0c1220 0%, #131b2e 100%);
 }
 
-.crt-screen::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: 1;
-  background: linear-gradient(
-    transparent 50%, 
-    rgba(0, 255, 65, 0.015) 50%
-  );
-  background-size: 100% 4px;
-}
-
-.crt-screen::after {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: 2;
-  background: radial-gradient(
-    circle at center,
-    transparent 80%,
-    rgba(5, 8, 16, 0.3) 100%
-  );
-  opacity: 0.4;
-}
+/* CRT overlays removed - were making UI too dark */
 
 /* Grid background */
 .terminal-grid {
