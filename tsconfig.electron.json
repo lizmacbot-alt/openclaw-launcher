@@ -1,15 +1,17 @@
 {
-  "extends": "./tsconfig.json",
   "include": ["electron"],
   "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
     "outDir": "dist-electron",
     "noEmit": false,
-    "lib": ["ESNext"],
-    "jsx": "react-jsx",
-    "allowImportingTsExtensions": false,
+    "lib": ["ES2020"],
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": false
   }
 }
