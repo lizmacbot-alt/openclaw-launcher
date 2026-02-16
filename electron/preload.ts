@@ -4,6 +4,7 @@ const ALLOWED_CHANNELS = new Set([
   'system-check',
   'install-node',
   'install-openclaw',
+  'install-progress',
   'verify-api-key',
   'write-config',
   'install-templates',

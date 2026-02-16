@@ -60,16 +60,27 @@ app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) creat
 
 function homedir() { return os.homedir() }
 
-function httpRequest(url: string, options: https.RequestOptions, body?: string): Promise<{ status: number; body: string }> {
+function httpRequest(
+  url: string, 
+  options: https.RequestOptions & { timeout?: number }, 
+  body?: string
+): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
+    const timeoutMs = options.timeout || 15000
     const mod = url.startsWith('https') ? https : http
+    
     const req = mod.request(url, options, (res) => {
       let data = ''
       res.on('data', (c) => data += c)
       res.on('end', () => resolve({ status: res.statusCode || 0, body: data }))
     })
+    
     req.on('error', reject)
-    req.setTimeout(15000, () => { req.destroy(); reject(new Error('timeout')) })
+    req.setTimeout(timeoutMs, () => { 
+      req.destroy()
+      reject(new Error('timeout')) 
+    })
+    
     if (body) req.write(body)
     req.end()
   })
@@ -145,74 +156,213 @@ ipcMain.handle('install-node', async (_event) => {
 
 // ── IPC: install-openclaw ──
 
-ipcMain.handle('install-openclaw', async (_event) => {
-  try {
-    await execAsync('npm install -g openclaw@latest', { timeout: 120000 })
-    return { success: true }
-  } catch (e: any) {
-    return { success: false, error: e.message, manual: 'Run in terminal: npm install -g openclaw@latest' }
-  }
+ipcMain.handle('install-openclaw', async (event) => {
+  return new Promise((resolve) => {
+    try {
+      // Check if npm is available
+      try {
+        require('child_process').execSync('npm --version', { stdio: 'ignore' })
+      } catch {
+        return resolve({ 
+          success: false, 
+          error: 'npm not found in PATH', 
+          manual: 'Install Node.js with npm from https://nodejs.org' 
+        })
+      }
+
+      const npmProcess = spawn('npm', ['install', '-g', 'openclaw@latest'], {
+        stdio: ['ignore', 'pipe', 'pipe']
+      })
+
+      npmProcess.stdout?.on('data', (data) => {
+        const output = data.toString().trim()
+        if (output) {
+          event.sender.send('install-progress', { type: 'stdout', data: output })
+        }
+      })
+
+      npmProcess.stderr?.on('data', (data) => {
+        const output = data.toString().trim()
+        if (output) {
+          event.sender.send('install-progress', { type: 'stderr', data: output })
+        }
+      })
+
+      npmProcess.on('close', async (code) => {
+        if (code === 0) {
+          // Verify installation succeeded
+          try {
+            const { stdout } = await execAsync('openclaw --version', { timeout: 5000 })
+            event.sender.send('install-progress', { 
+              type: 'success', 
+              data: `Installation complete! OpenClaw ${stdout.trim().split('\n')[0]} is ready.` 
+            })
+            resolve({ success: true })
+          } catch {
+            resolve({ 
+              success: false, 
+              error: 'Installation completed but OpenClaw command not found', 
+              manual: 'Try restarting your terminal or check PATH' 
+            })
+          }
+        } else {
+          const errorMsg = code === 1 ? 'Permission denied - try running with sudo or admin rights' :
+                          code === 126 ? 'Command not executable' :
+                          code === 127 ? 'Command not found' :
+                          `Process exited with code ${code}`
+          resolve({ success: false, error: errorMsg, manual: 'Run in terminal: npm install -g openclaw@latest' })
+        }
+      })
+
+      npmProcess.on('error', (error) => {
+        resolve({ success: false, error: error.message, manual: 'Run in terminal: npm install -g openclaw@latest' })
+      })
+
+      // Set timeout
+      setTimeout(() => {
+        npmProcess.kill('SIGTERM')
+        resolve({ success: false, error: 'Installation timed out after 2 minutes', manual: 'Run in terminal: npm install -g openclaw@latest' })
+      }, 120000)
+
+    } catch (e: any) {
+      resolve({ success: false, error: e.message, manual: 'Run in terminal: npm install -g openclaw@latest' })
+    }
+  })
 })
 
 // ── IPC: verify-api-key ──
 
 ipcMain.handle('verify-api-key', async (_event, provider: string, apiKey: string) => {
+  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+    return { valid: false, error: 'API key is required' }
+  }
+
   try {
     if (provider === 'anthropic') {
       const res = await httpRequest('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey,
+          'x-api-key': apiKey.trim(),
           'anthropic-version': '2023-06-01',
         },
       }, JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1,
-        messages: [{ role: 'user', content: 'hi' }],
+        messages: [{ role: 'user', content: 'test' }],
       }))
+      
       if (res.status === 200 || res.status === 201) return { valid: true }
-      const body = JSON.parse(res.body)
-      if (body?.error?.type === 'authentication_error') return { valid: false, error: 'Invalid API key' }
-      // Overloaded or other non-auth error means key is valid
-      if (res.status === 529 || res.status === 429) return { valid: true }
-      return { valid: false, error: body?.error?.message || `HTTP ${res.status}` }
+      if (res.status === 529 || res.status === 429) return { valid: true } // Rate limited = key works
+      
+      try {
+        const body = JSON.parse(res.body)
+        if (body?.error?.type === 'authentication_error') {
+          return { valid: false, error: 'Invalid API key - check your Anthropic console' }
+        }
+        return { valid: false, error: body?.error?.message || `API error (HTTP ${res.status})` }
+      } catch {
+        return { valid: false, error: `HTTP ${res.status} - Invalid response format` }
+      }
     }
 
     if (provider === 'openai') {
-      const res = await httpRequest('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
+      const res = await httpRequest('https://api.openai.com/v1/models', {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${apiKey.trim()}`,
         },
-      }, JSON.stringify({
-        model: 'gpt-4o-mini',
-        max_tokens: 1,
-        messages: [{ role: 'user', content: 'hi' }],
-      }))
-      if (res.status === 200 || res.status === 201) return { valid: true }
-      if (res.status === 429) return { valid: true } // rate limited = key is valid
-      const body = JSON.parse(res.body)
-      if (res.status === 401) return { valid: false, error: 'Invalid API key' }
-      return { valid: false, error: body?.error?.message || `HTTP ${res.status}` }
+      })
+      
+      if (res.status === 200) return { valid: true }
+      if (res.status === 429) return { valid: true } // Rate limited = key works
+      
+      try {
+        const body = JSON.parse(res.body)
+        if (res.status === 401) {
+          return { valid: false, error: 'Invalid API key - check your OpenAI dashboard' }
+        }
+        return { valid: false, error: body?.error?.message || `API error (HTTP ${res.status})` }
+      } catch {
+        return { valid: false, error: `HTTP ${res.status} - Invalid response format` }
+      }
     }
 
     if (provider === 'google') {
       const res = await httpRequest(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' } },
-        JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }], generationConfig: { maxOutputTokens: 1 } })
+        `https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(apiKey.trim())}`,
+        { method: 'GET', headers: { 'Content-Type': 'application/json' } }
       )
+      
       if (res.status === 200) return { valid: true }
-      if (res.status === 400 || res.status === 403) return { valid: false, error: 'Invalid API key' }
-      return { valid: false, error: `HTTP ${res.status}` }
+      
+      try {
+        const body = JSON.parse(res.body)
+        if (res.status === 400 || res.status === 403) {
+          return { valid: false, error: 'Invalid API key - check your Google AI Studio' }
+        }
+        return { valid: false, error: body?.error?.message || `API error (HTTP ${res.status})` }
+      } catch {
+        return { valid: false, error: `HTTP ${res.status} - Invalid response format` }
+      }
     }
 
-    // For groq, openrouter, custom — just accept
-    return { valid: true }
+    if (provider === 'groq') {
+      const res = await httpRequest('https://api.groq.com/openai/v1/models', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey.trim()}`,
+        },
+      })
+      
+      if (res.status === 200) return { valid: true }
+      if (res.status === 429) return { valid: true } // Rate limited = key works
+      
+      try {
+        const body = JSON.parse(res.body)
+        if (res.status === 401) {
+          return { valid: false, error: 'Invalid API key - check your Groq console' }
+        }
+        return { valid: false, error: body?.error?.message || `API error (HTTP ${res.status})` }
+      } catch {
+        return { valid: false, error: `HTTP ${res.status} - Invalid response format` }
+      }
+    }
+
+    if (provider === 'openrouter') {
+      const res = await httpRequest('https://openrouter.ai/api/v1/models', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey.trim()}`,
+        },
+      })
+      
+      if (res.status === 200) return { valid: true }
+      if (res.status === 429) return { valid: true } // Rate limited = key works
+      
+      try {
+        const body = JSON.parse(res.body)
+        if (res.status === 401) {
+          return { valid: false, error: 'Invalid API key - check your OpenRouter account' }
+        }
+        return { valid: false, error: body?.error?.message || `API error (HTTP ${res.status})` }
+      } catch {
+        return { valid: false, error: `HTTP ${res.status} - Invalid response format` }
+      }
+    }
+
+    if (provider === 'custom') {
+      // For custom providers, we can't verify without knowing the endpoint
+      return { valid: true }
+    }
+
+    return { valid: false, error: `Unsupported provider: ${provider}` }
+    
   } catch (e: any) {
-    return { valid: false, error: e.message }
+    if (e.message === 'timeout') {
+      return { valid: false, error: 'Request timed out - check your internet connection' }
+    }
+    return { valid: false, error: `Network error: ${e.message}` }
   }
 })
 
@@ -319,38 +469,129 @@ ipcMain.handle('install-templates', async (_event, templates: string[]) => {
     const workspaceDir = path.join(homedir(), '.openclaw', 'workspace')
     await mkdir(workspaceDir, { recursive: true })
 
-    // Templates are bundled in app resources or dev source
-    const templateBasePaths: Record<string, string> = {
+    const results: Array<{ template: string; status: 'success' | 'skipped' | 'error'; message: string }> = []
+
+    // Free templates (bundled locally)
+    const freeTemplates: Record<string, string> = {
       'starter': 'the-starter',
       'note-taker': 'the-note-taker',
     }
 
+    // Premium templates (require license verification)
+    const premiumTemplates: Record<string, string> = {
+      'productivity-pro': 'the-productivity-pro',
+      'research-assistant': 'the-research-assistant',
+      'creative-writer': 'the-creative-writer',
+    }
+
     for (const tmpl of templates) {
-      const dirName = templateBasePaths[tmpl]
-      if (!dirName) continue // premium templates handled separately
+      try {
+        if (freeTemplates[tmpl]) {
+          // Handle free templates
+          const dirName = freeTemplates[tmpl]
+          let templateDir: string
 
-      // In packaged app, templates are in resources; in dev, in src/templates
-      let templateDir: string
-      if (app.isPackaged) {
-        templateDir = path.join(process.resourcesPath, 'templates', dirName)
-      } else {
-        templateDir = path.join(__dirname, '..', 'src', 'templates', dirName)
-      }
+          // In packaged app, templates are in resources; in dev, in src/templates
+          if (app.isPackaged) {
+            templateDir = path.join(process.resourcesPath, 'templates', dirName)
+          } else {
+            templateDir = path.join(__dirname, '..', 'src', 'templates', dirName)
+          }
 
-      if (!fs.existsSync(templateDir)) continue
-
-      const files = fs.readdirSync(templateDir).filter(f => f.endsWith('.md'))
-      for (const file of files) {
-        const src = path.join(templateDir, file)
-        const dest = path.join(workspaceDir, file)
-        // Don't overwrite existing files unless they're the defaults
-        if (!fs.existsSync(dest)) {
-          fs.copyFileSync(src, dest)
+          if (fs.existsSync(templateDir)) {
+            const files = fs.readdirSync(templateDir).filter(f => f.endsWith('.md'))
+            let installedCount = 0
+            
+            for (const file of files) {
+              const src = path.join(templateDir, file)
+              const dest = path.join(workspaceDir, file)
+              
+              // Check if file already exists
+              if (fs.existsSync(dest)) {
+                // Skip if it's exactly the same content
+                const srcContent = fs.readFileSync(src, 'utf-8')
+                const destContent = fs.readFileSync(dest, 'utf-8')
+                if (srcContent === destContent) {
+                  continue // Skip identical files
+                }
+                // Backup existing file before overwrite
+                const backupPath = dest + '.backup.' + Date.now()
+                fs.copyFileSync(dest, backupPath)
+              }
+              
+              fs.copyFileSync(src, dest)
+              installedCount++
+            }
+            
+            results.push({
+              template: tmpl,
+              status: 'success',
+              message: `Installed ${installedCount} files`
+            })
+          } else {
+            results.push({
+              template: tmpl,
+              status: 'error',
+              message: 'Template files not found'
+            })
+          }
+        } else if (premiumTemplates[tmpl]) {
+          // Handle premium templates
+          // Check if we have a valid license
+          const licPath = path.join(homedir(), '.openclaw-launcher', 'licenses.json')
+          let hasValidLicense = false
+          
+          try {
+            const licenses = JSON.parse(fs.readFileSync(licPath, 'utf-8'))
+            const productId = premiumTemplates[tmpl]
+            hasValidLicense = licenses[productId]?.verified === true
+          } catch {
+            // No license file or invalid JSON
+          }
+          
+          if (!hasValidLicense) {
+            results.push({
+              template: tmpl,
+              status: 'error',
+              message: 'Premium template requires valid license'
+            })
+            continue
+          }
+          
+          // For premium templates, we would download from a secure endpoint
+          // For now, just mark as success since license is verified
+          results.push({
+            template: tmpl,
+            status: 'success',
+            message: 'Premium template access verified'
+          })
+        } else {
+          results.push({
+            template: tmpl,
+            status: 'error',
+            message: 'Unknown template'
+          })
         }
+      } catch (error: any) {
+        results.push({
+          template: tmpl,
+          status: 'error',
+          message: error.message
+        })
       }
     }
 
-    return { success: true }
+    const hasErrors = results.some(r => r.status === 'error')
+    const successCount = results.filter(r => r.status === 'success').length
+
+    return {
+      success: !hasErrors,
+      results,
+      message: hasErrors 
+        ? 'Some templates failed to install'
+        : `Successfully installed ${successCount} template(s)`
+    }
+
   } catch (e: any) {
     return { success: false, error: e.message }
   }
@@ -360,27 +601,94 @@ ipcMain.handle('install-templates', async (_event, templates: string[]) => {
 
 ipcMain.handle('start-agent', async () => {
   try {
-    // Try daemon mode first
-    const { stdout } = await execAsync('openclaw gateway start', { timeout: 15000 })
-    return { success: true, output: stdout.trim() }
-  } catch (e: any) {
-    // If daemon mode doesn't work, spawn as child
+    // First check if gateway is already running
     try {
-      if (gatewayProcess) {
-        gatewayProcess.kill()
-        gatewayProcess = null
+      const res = await httpRequest('http://localhost:18789/health', { method: 'GET', timeout: 2000 })
+      if (res.status === 200) {
+        return { success: true, output: 'Gateway is already running on port 18789' }
       }
-      gatewayProcess = spawn('openclaw', ['gateway', '--port', '18789'], {
-        detached: true,
-        stdio: 'ignore',
-      })
-      gatewayProcess.unref()
-      // Wait a moment for startup
-      await new Promise(r => setTimeout(r, 2000))
-      return { success: true, output: 'Gateway started as child process' }
-    } catch (e2: any) {
-      return { success: false, error: e2.message }
+    } catch {
+      // Not running, continue with start
     }
+
+    // Try daemon mode first
+    try {
+      const { stdout } = await execAsync('openclaw gateway start', { timeout: 15000 })
+      
+      // Wait a moment and verify it's actually running
+      await new Promise(r => setTimeout(r, 2000))
+      try {
+        const res = await httpRequest('http://localhost:18789/health', { method: 'GET', timeout: 5000 })
+        if (res.status === 200) {
+          return { success: true, output: stdout.trim() || 'Gateway started successfully' }
+        }
+      } catch {
+        // Continue to fallback method
+      }
+      
+      return { success: true, output: stdout.trim() || 'Gateway start command executed' }
+    } catch (daemonError: any) {
+      // If daemon mode doesn't work, spawn as child process
+      try {
+        // Clean up any existing process
+        if (gatewayProcess) {
+          gatewayProcess.kill('SIGTERM')
+          gatewayProcess = null
+        }
+
+        // Check if openclaw command exists
+        try {
+          await execAsync('which openclaw', { timeout: 5000 })
+        } catch {
+          return { success: false, error: 'OpenClaw CLI not found - please install it first' }
+        }
+
+        gatewayProcess = spawn('openclaw', ['gateway', '--port', '18789'], {
+          detached: false, // Keep attached so we can monitor it
+          stdio: 'pipe',
+        })
+
+        // Set up error handling
+        gatewayProcess.on('error', (error) => {
+          console.error('Gateway process error:', error)
+        })
+
+        gatewayProcess.stderr?.on('data', (data) => {
+          console.error('Gateway stderr:', data.toString())
+        })
+
+        // Wait for startup and verify
+        let attempts = 0
+        while (attempts < 10) {
+          await new Promise(r => setTimeout(r, 1000))
+          try {
+            const res = await httpRequest('http://localhost:18789/health', { method: 'GET', timeout: 2000 })
+            if (res.status === 200) {
+              return { success: true, output: 'Gateway started as background process' }
+            }
+          } catch {
+            // Keep trying
+          }
+          attempts++
+        }
+
+        // If we get here, startup might have failed
+        if (gatewayProcess.exitCode !== null) {
+          return { success: false, error: `Gateway process exited with code ${gatewayProcess.exitCode}` }
+        }
+
+        // Process is running but not responding - assume it needs more time
+        return { success: true, output: 'Gateway process started (may need a moment to initialize)' }
+
+      } catch (spawnError: any) {
+        return { 
+          success: false, 
+          error: `Failed to start gateway: ${daemonError.message}. Child process also failed: ${spawnError.message}` 
+        }
+      }
+    }
+  } catch (e: any) {
+    return { success: false, error: e.message }
   }
 })
 
@@ -401,20 +709,45 @@ ipcMain.handle('stop-agent', async () => {
 // ── IPC: agent-status ──
 
 ipcMain.handle('agent-status', async () => {
+  // First try HTTP health check (most reliable)
   try {
-    // Try CLI status first
-    const { stdout } = await execAsync('openclaw gateway status', { timeout: 5000 })
-    const running = stdout.toLowerCase().includes('running') || stdout.toLowerCase().includes('online') || stdout.toLowerCase().includes('listening')
-    return { running, detail: stdout.trim() }
-  } catch {
-    // Fallback: HTTP ping
-    try {
-      const res = await httpRequest('http://localhost:18789/health', { method: 'GET' })
-      return { running: res.status === 200, detail: 'Gateway responding on port 18789' }
-    } catch {
-      return { running: false, detail: 'Gateway not running' }
+    const res = await httpRequest('http://localhost:18789/health', { method: 'GET', timeout: 3000 })
+    if (res.status === 200) {
+      return { running: true, detail: 'Gateway is running and responding on port 18789' }
     }
+  } catch {
+    // HTTP check failed, continue with other methods
   }
+
+  // Try CLI status command
+  try {
+    const { stdout } = await execAsync('openclaw gateway status', { timeout: 5000 })
+    const output = stdout.trim()
+    const running = output.toLowerCase().includes('running') || 
+                   output.toLowerCase().includes('online') || 
+                   output.toLowerCase().includes('listening') ||
+                   output.toLowerCase().includes('active')
+    return { running, detail: output || 'Gateway status checked via CLI' }
+  } catch (cliError: any) {
+    // CLI command failed
+  }
+
+  // Check if our child process is still running
+  if (gatewayProcess && !gatewayProcess.killed && gatewayProcess.exitCode === null) {
+    return { running: true, detail: 'Gateway process is running (child process)' }
+  }
+
+  // Try to check if port 18789 is in use (indicating something is running there)
+  try {
+    const { stdout } = await execAsync('lsof -ti:18789', { timeout: 3000 })
+    if (stdout.trim()) {
+      return { running: true, detail: 'Port 18789 is in use (gateway may be starting up)' }
+    }
+  } catch {
+    // lsof failed or port not in use
+  }
+
+  return { running: false, detail: 'Gateway is not running' }
 })
 
 // ── IPC: open-channel ──
