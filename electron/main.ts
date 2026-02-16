@@ -443,6 +443,117 @@ ipcMain.handle('auth-paste-token', async (_event, providerId: string, token: str
   }
 })
 
+// ── IPC: auth-setup-token ──
+// Opens Terminal.app with `openclaw models auth setup-token --provider <id>`
+// This runs the provider's CLI login (opens browser), gets a token, saves it
+
+ipcMain.handle('auth-setup-token', async (_event, providerId: string) => {
+  const openclawNodeBin = path.join(os.homedir(), '.openclaw', 'node', 'bin')
+  const envPath = `${openclawNodeBin}:${process.env.PATH}`
+
+  dlog(`auth-setup-token: provider=${providerId}`)
+
+  // Find openclaw
+  let openclawBin = ''
+  for (const p of [
+    path.join(openclawNodeBin, 'openclaw'),
+    '/usr/local/bin/openclaw',
+    '/opt/homebrew/bin/openclaw',
+  ]) {
+    try { await fs.promises.access(p, fs.constants.X_OK); openclawBin = p; break } catch {}
+  }
+  if (!openclawBin) {
+    try { const { stdout } = await execAsync('which openclaw', { env: { ...process.env, PATH: envPath } }); openclawBin = stdout.trim() } catch {}
+  }
+  if (!openclawBin) {
+    return { success: false, error: 'OpenClaw CLI not found.' }
+  }
+
+  dlog(`auth-setup-token: binary=${openclawBin}`)
+
+  const platform = process.platform
+  const markerFile = path.join(os.tmpdir(), `openclaw-auth-${Date.now()}`)
+  const successMarker = `${markerFile}.ok`
+  const failMarker = `${markerFile}.fail`
+
+  if (platform === 'darwin') {
+    const script = [
+      '#!/bin/bash',
+      `export PATH="${openclawNodeBin}:$PATH"`,
+      'clear',
+      'echo ""',
+      'echo "🦞 OpenClaw Login"',
+      'echo "=================="',
+      'echo ""',
+      'echo "Follow the prompts below to connect your AI account."',
+      'echo "A browser window will open for you to sign in."',
+      'echo ""',
+      `"${openclawBin}" models auth setup-token --provider ${providerId} --yes`,
+      'EXIT_CODE=$?',
+      'echo ""',
+      'if [ $EXIT_CODE -eq 0 ]; then',
+      `  echo "done" > "${successMarker}"`,
+      '  echo "✅ Login successful! You can close this window."',
+      'else',
+      `  echo "fail" > "${failMarker}"`,
+      '  echo "❌ Login failed (exit code $EXIT_CODE). Close this window and try again."',
+      'fi',
+      'echo ""',
+      'echo "Press any key to close..."',
+      'read -n 1',
+    ].join('\n')
+
+    const scriptPath = `${markerFile}.sh`
+    await fs.promises.writeFile(scriptPath, script, { mode: 0o755 })
+    dlog(`auth-setup-token: script at ${scriptPath}`)
+
+    try {
+      await execAsync(`open -a Terminal.app "${scriptPath}"`)
+      dlog('auth-setup-token: Terminal.app opened')
+    } catch (e: any) {
+      dlog(`auth-setup-token: could not open Terminal: ${e.message}`)
+      await fs.promises.unlink(scriptPath).catch(() => {})
+      return { success: false, error: 'Could not open Terminal.' }
+    }
+
+    // Poll for result (up to 3 minutes)
+    const deadline = Date.now() + 180000
+    while (Date.now() < deadline) {
+      try {
+        await fs.promises.access(successMarker)
+        // Cleanup
+        await fs.promises.unlink(successMarker).catch(() => {})
+        await fs.promises.unlink(scriptPath).catch(() => {})
+        dlog('auth-setup-token: success marker found')
+
+        // Verify auth actually works
+        try {
+          const { stdout } = await execAsync(`"${openclawBin}" models status`, { timeout: 10000, env: { ...process.env, PATH: envPath } })
+          dlog(`auth-setup-token: models status = ${stdout.trim().slice(0, 200)}`)
+        } catch {}
+
+        return { success: true }
+      } catch {}
+
+      try {
+        await fs.promises.access(failMarker)
+        await fs.promises.unlink(failMarker).catch(() => {})
+        await fs.promises.unlink(scriptPath).catch(() => {})
+        dlog('auth-setup-token: fail marker found')
+        return { success: false, error: 'Login failed in terminal. Try again or check the terminal output.' }
+      } catch {}
+
+      await new Promise(r => setTimeout(r, 1000))
+    }
+
+    await fs.promises.unlink(scriptPath).catch(() => {})
+    return { success: false, error: 'Login timed out (3 min). Try again.' }
+  } else {
+    // Linux/Windows: similar but with different terminal emulators
+    return { success: false, error: 'Login flow not yet supported on this platform. Use API key instead.' }
+  }
+})
+
 // ── IPC: auth-login (legacy, opens terminal) ──
 
 ipcMain.handle('auth-login', async (_event, providerId: string, authChoice: string) => {
