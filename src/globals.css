@@ -19,12 +19,18 @@ button, input, a, select {
   -webkit-app-region: no-drag; 
 }
 
-/* Lobster claw cursors */
+/* Lobster claw cursors - open default, closes on click */
 body, body * {
-  cursor: url('/cursors/claw-default.svg') 4 10, auto;
+  cursor: url('/cursors/claw-open.svg') 2 6, auto;
+}
+body:active, body:active * {
+  cursor: url('/cursors/claw-closed.svg') 2 6, auto;
 }
 button, a, input, select, [role="button"] {
-  cursor: url('/cursors/claw-pointer.svg') 4 10, pointer;
+  cursor: url('/cursors/claw-open.svg') 2 6, pointer;
+}
+button:active, a:active {
+  cursor: url('/cursors/claw-closed.svg') 2 6, pointer;
 }
 
 /* Terminal CRT Effects */

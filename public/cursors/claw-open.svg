@@ -1,0 +1,11 @@
+<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simple lobster claw - OPEN state -->
+  <!-- Upper pincer -->
+  <path d="M8 1 C10 0, 13 1, 14 4 C15 6, 13 8, 11 7.5" fill="#ff4d4d" stroke="#991b1b" stroke-width="0.8"/>
+  <!-- Lower pincer -->
+  <path d="M8 11 C10 12, 13 11, 14 8 C15 6, 13 5, 11 5.5" fill="#ff4d4d" stroke="#991b1b" stroke-width="0.8"/>
+  <!-- Arm -->
+  <path d="M2 6 C3 4, 6 3.5, 8 5 L8 7 C6 8.5, 3 8, 2 6Z" fill="#e53e3e" stroke="#991b1b" stroke-width="0.8"/>
+  <!-- Joint dot -->
+  <circle cx="8" cy="6" r="1.5" fill="#ff6b6b" stroke="#991b1b" stroke-width="0.5"/>
+</svg>
