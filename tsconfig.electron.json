@@ -4,6 +4,12 @@
   "compilerOptions": {
     "outDir": "dist-electron",
     "noEmit": false,
-    "lib": ["ESNext"]
+    "lib": ["ESNext"],
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": false,
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "noImplicitAny": false
   }
 }

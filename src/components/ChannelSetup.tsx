@@ -1,11 +1,12 @@
 import { useSetupStore } from '../stores/setup-store'
+import { ipcInvoke } from '../lib/ipc'
 
 const channels = [
-  { id: 'telegram', icon: '✈️', name: 'Telegram', sub: 'Easiest setup', tag: '⭐', instructions: ['Open @BotFather on Telegram', 'Send /newbot and follow the prompts', 'Paste the token below'] },
+  { id: 'telegram', icon: '✈️', name: 'Telegram', sub: 'Easiest setup', tag: '⭐', instructions: ['Open @BotFather on Telegram', 'Send /newbot and follow the prompts', 'Paste the bot token below'] },
   { id: 'discord', icon: '💬', name: 'Discord', sub: 'For teams', instructions: ['Go to Discord Developer Portal', 'Create a new Application → Bot', 'Copy the bot token below'] },
   { id: 'whatsapp', icon: '📱', name: 'WhatsApp', sub: 'Personal', instructions: ['Set up WhatsApp Business API', 'Get your access token', 'Paste the token below'] },
   { id: 'signal', icon: '🔒', name: 'Signal', sub: 'Private', instructions: ['Install signal-cli', 'Link your device', 'Paste your phone number below'] },
-  { id: 'terminal', icon: '🖥️', name: 'Terminal', sub: 'CLI nerds', instructions: ['No setup needed!', 'Your agent will run in the terminal', 'Just hit Next'] },
+  { id: 'terminal', icon: '🖥️', name: 'Terminal', sub: 'CLI nerds', instructions: ['No setup needed!', 'Run: openclaw chat', 'Chat directly in your terminal'] },
   { id: 'browser', icon: '🌐', name: 'Browser', sub: 'Dashboard', instructions: ['No setup needed!', 'Chat via the web dashboard', 'Just hit Next'] },
 ]
 
@@ -13,6 +14,10 @@ export default function ChannelSetup() {
   const { channel, channelToken, setChannel, setChannelToken, setScreen } = useSetupStore()
   const selected = channels.find((c) => c.id === channel)
   const noToken = channel === 'terminal' || channel === 'browser'
+
+  const openHelp = (url: string) => {
+    ipcInvoke('open-external', url).catch(() => window.open(url, '_blank'))
+  }
 
   return (
     <div className="flex flex-col items-center h-full animate-in px-8 py-4 overflow-y-auto">
@@ -39,7 +44,19 @@ export default function ChannelSetup() {
       {selected && (
         <div className="w-full max-w-lg animate-in">
           <div className="bg-surface border border-border rounded-xl p-4 mb-4">
-            <div className="text-sm font-medium mb-3">Setup Instructions</div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-medium">Setup Instructions</div>
+              {channel === 'telegram' && (
+                <button onClick={() => openHelp('https://t.me/BotFather')} className="text-xs text-coral hover:text-coral-hover">
+                  Open BotFather →
+                </button>
+              )}
+              {channel === 'discord' && (
+                <button onClick={() => openHelp('https://discord.com/developers/applications')} className="text-xs text-coral hover:text-coral-hover">
+                  Developer Portal →
+                </button>
+              )}
+            </div>
             <ol className="space-y-2">
               {selected.instructions.map((inst, i) => (
                 <li key={i} className="flex gap-3 text-sm text-muted">
@@ -52,10 +69,10 @@ export default function ChannelSetup() {
           {!noToken && (
             <input
               type="text"
-              placeholder="Paste your token here..."
+              placeholder={channel === 'signal' ? 'Your phone number (+1234567890)...' : 'Paste your token here...'}
               value={channelToken}
               onChange={(e) => setChannelToken(e.target.value)}
-              className="w-full bg-surface border border-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-coral transition-colors"
+              className="w-full bg-surface border border-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-coral transition-colors font-mono"
             />
           )}
         </div>
