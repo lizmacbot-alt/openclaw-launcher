@@ -19,13 +19,10 @@ The whole thing is a step-by-step wizard. Click, click, click, you have a person
 
 ## Download
 
-Grab the latest release for your platform:
+Download the latest version from the Releases page:
 
-- **macOS** (.dmg): [Download](https://lizmacliz.com/api/download?platform=mac)
-- **Windows** (.exe): [Download](https://lizmacliz.com/api/download?platform=windows)
-- **Linux** (.AppImage): [Download](https://lizmacliz.com/api/download?platform=linux)
 
-Or check the [Releases](https://github.com/lizmacbot-alt/openclaw-launcher/releases) page.
+👉 [**Download from Releases**](https://github.com/lizmacbot-alt/openclaw-launcher/releases) — macOS (.dmg), Windows (.exe), Linux (.AppImage)
 
 ## Templates
 
@@ -112,3 +109,4 @@ MIT
 - [OpenClaw](https://openclaw.ai) (the agent itself)
 - [lizmacliz.com](https://lizmacliz.com) (templates + blog)
 - [Gumroad store](https://lizmacliz.gumroad.com) (premium templates)
+
