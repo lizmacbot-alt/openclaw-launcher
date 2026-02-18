@@ -4,8 +4,6 @@ The easy way to set up [OpenClaw](https://openclaw.ai). No terminal, no config f
 
 OpenClaw is an open-source AI agent that lives on your computer. It can talk to you on Telegram, Discord, WhatsApp, or just in the browser. The Launcher handles the entire setup in about 2 minutes.
 
-![OpenClaw Launcher Welcome Screen](https://lizmacliz.com/images/launcher-welcome.png)
-
 ## What it does
 
 1. **Checks your system** and auto-installs Node.js if you don't have it
@@ -16,13 +14,6 @@ OpenClaw is an open-source AI agent that lives on your computer. It can talk to 
 6. **Starts the agent** and you're done
 
 The whole thing is a step-by-step wizard. Click, click, click, you have a personal AI agent running locally.
-
-## Download
-
-Download the latest version from the Releases page:
-
-
-👉 [**Download from Releases**](https://github.com/lizmacbot-alt/openclaw-launcher/releases) — macOS (.dmg), Windows (.exe), Linux (.AppImage)
 
 ## Templates
 
@@ -103,10 +94,3 @@ Issues and PRs welcome. If you find a bug during setup, click the "📋 logs" bu
 ## License
 
 MIT
-
-## Links
-
-- [OpenClaw](https://openclaw.ai) (the agent itself)
-- [lizmacliz.com](https://lizmacliz.com) (templates + blog)
-- [Gumroad store](https://lizmacliz.gumroad.com) (premium templates)
-
